@@ -94,6 +94,19 @@ With AI enabled:
 
 > Farmor har inte rört sig sedan 08:42 i Köket. Det är nu halvtiden på eftermiddagen — kanske värt att ringa och höra hur det är?
 
+## Integration icon (HA 2026.3+)
+
+Starting with Home Assistant 2026.3, custom integrations can ship their own brand icons directly — no external PR needed.
+
+Place your icon in:
+```
+custom_components/caregiver_mode/brand/icon.png
+```
+
+Optional variants: `dark_icon.png`, `logo.png`, `logo@2x.png`. Recommended size: 256×256 px PNG.
+
+The `brand/` directory is already included in this repo (empty). Drop in your icon and restart HA.
+
 ## Stöd projektet
 
 Gillar du det här projektet? En kopp kaffe uppskattas ☕
