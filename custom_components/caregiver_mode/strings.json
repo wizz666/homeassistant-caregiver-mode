@@ -1,0 +1,75 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Caregiver Mode – Basic Settings",
+        "description": "Configure basic monitoring settings for the person.",
+        "data": {
+          "person_name": "Person name",
+          "active_start": "Active hours start (HH:MM)",
+          "active_end": "Active hours end (HH:MM)",
+          "alert_delay": "Alert after X hours without motion",
+          "alert_cooldown": "Alert cooldown (hours between repeated alerts)"
+        }
+      },
+      "sensors": {
+        "title": "Caregiver Mode – Select Sensors",
+        "description": "Select motion/occupancy sensors to monitor. You can assign room names after setup via the integration options.",
+        "data": {
+          "motion_sensors": "Motion sensors to monitor",
+          "room_names": "Room names (comma-separated, matching sensor order)"
+        }
+      },
+      "notifications": {
+        "title": "Caregiver Mode – Notifications",
+        "description": "Configure how alerts are sent. At least one channel (HA app, Telegram, or Ntfy) must be configured.",
+        "data": {
+          "notify_primary": "Primary notification service (e.g. notify.mobile_app_iphone)",
+          "notify_secondary": "Secondary notification service (optional)",
+          "telegram_bot_token": "Telegram bot token",
+          "telegram_chat_ids": "Telegram chat ID(s) (comma-separated)",
+          "ntfy_topic": "Ntfy.sh topic",
+          "ntfy_server": "Ntfy.sh server URL",
+          "ai_enabled": "Enable AI-generated alert messages",
+          "ai_provider": "AI provider",
+          "ai_api_key": "AI API key"
+        }
+      }
+    },
+    "error": {
+      "invalid_time": "Invalid time format. Use HH:MM.",
+      "no_sensors": "At least one sensor must be selected.",
+      "invalid_notify": "Notification service must start with 'notify.'",
+      "ai_key_required": "API key is required when AI messages are enabled.",
+      "telegram_chat_id_required": "At least one Telegram chat ID is required when a bot token is provided.",
+      "no_channel_configured": "At least one notification channel must be configured (HA app, Telegram, or Ntfy)."
+    },
+    "abort": {
+      "already_configured": "This person is already configured."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "caregiver_status": {
+        "name": "Status",
+        "state": {
+          "active": "Active",
+          "inactive": "Inactive",
+          "alert": "Alert",
+          "unknown": "Unknown"
+        }
+      },
+      "caregiver_last_seen": {
+        "name": "Last Seen"
+      },
+      "caregiver_last_room": {
+        "name": "Last Room"
+      }
+    },
+    "binary_sensor": {
+      "caregiver_alert": {
+        "name": "Alert Active"
+      }
+    }
+  }
+}

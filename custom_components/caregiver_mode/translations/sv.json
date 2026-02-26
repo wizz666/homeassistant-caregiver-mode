@@ -1,0 +1,75 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Caregiver Mode – Grundinställningar",
+        "description": "Konfigurera grundläggande övervakningsinställningar för personen.",
+        "data": {
+          "person_name": "Personens namn",
+          "active_start": "Aktiva timmar start (HH:MM)",
+          "active_end": "Aktiva timmar slut (HH:MM)",
+          "alert_delay": "Larm efter X timmar utan rörelse",
+          "alert_cooldown": "Larmkylning (timmar mellan upprepade larm)"
+        }
+      },
+      "sensors": {
+        "title": "Caregiver Mode – Välj sensorer",
+        "description": "Välj rörelsesensorer att övervaka. Du kan tilldela rumsnamn efter installation via integrationsinställningarna.",
+        "data": {
+          "motion_sensors": "Rörelsesensorer att övervaka",
+          "room_names": "Rumsnamn (kommaseparerade, i samma ordning som sensorerna)"
+        }
+      },
+      "notifications": {
+        "title": "Caregiver Mode – Notifikationer",
+        "description": "Konfigurera hur larm skickas. Minst en kanal (HA-app, Telegram eller Ntfy) måste konfigureras.",
+        "data": {
+          "notify_primary": "Primär notifikationstjänst (t.ex. notify.mobile_app_iphone)",
+          "notify_secondary": "Sekundär notifikationstjänst (valfri)",
+          "telegram_bot_token": "Telegram bot-token",
+          "telegram_chat_ids": "Telegram chat-ID(n) (kommaseparerade)",
+          "ntfy_topic": "Ntfy.sh ämne (topic)",
+          "ntfy_server": "Ntfy.sh server-URL",
+          "ai_enabled": "Aktivera AI-genererade larmmeddelanden",
+          "ai_provider": "AI-leverantör",
+          "ai_api_key": "AI API-nyckel"
+        }
+      }
+    },
+    "error": {
+      "invalid_time": "Ogiltigt tidsformat. Använd HH:MM.",
+      "no_sensors": "Minst en sensor måste väljas.",
+      "invalid_notify": "Notifikationstjänsten måste börja med 'notify.'",
+      "ai_key_required": "API-nyckel krävs när AI-meddelanden är aktiverade.",
+      "telegram_chat_id_required": "Minst ett Telegram chat-ID krävs när ett bot-token angetts.",
+      "no_channel_configured": "Minst en notifikationskanal måste konfigureras (HA-app, Telegram eller Ntfy)."
+    },
+    "abort": {
+      "already_configured": "Den här personen är redan konfigurerad."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "caregiver_status": {
+        "name": "Status",
+        "state": {
+          "active": "Aktiv",
+          "inactive": "Inaktiv",
+          "alert": "Larm",
+          "unknown": "Okänd"
+        }
+      },
+      "caregiver_last_seen": {
+        "name": "Senast sedd"
+      },
+      "caregiver_last_room": {
+        "name": "Senaste rum"
+      }
+    },
+    "binary_sensor": {
+      "caregiver_alert": {
+        "name": "Larm aktivt"
+      }
+    }
+  }
+}
