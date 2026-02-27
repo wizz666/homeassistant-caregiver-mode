@@ -1,8 +1,8 @@
 # Caregiver Mode for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Stöd_projektet-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/wizz666)
+[![Version](https://img.shields.io/badge/version-2.1.2-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support_this_project-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/wizz666)
 
 AI-assisted motion monitoring for elderly or vulnerable persons living independently. Caregiver Mode watches your motion sensors and sends contextual alerts — via the HA mobile app, Telegram, or Ntfy — if no activity is detected for a configurable number of hours.
 
@@ -56,7 +56,7 @@ Go to **Settings → Integrations → Add Integration → Caregiver Mode**.
 
 | Field | Description | Default |
 |---|---|---|
-| Person name | Name of the monitored person | Farmor |
+| Person name | Name of the monitored person | Grandma |
 | Active hours start | When to start monitoring (HH:MM) | 07:00 |
 | Active hours end | When to stop monitoring (HH:MM) | 22:00 |
 | Alert after X hours | Hours of inactivity before alert | 4 |
@@ -74,7 +74,7 @@ At least one channel must be configured.
 | Field | Example |
 |---|---|
 | Primary service | `notify.mobile_app_iphone` |
-| Secondary service | `notify.mobile_app_samsung` (optional) |
+| Secondary service | `notify.mobile_app_tablet` (optional) |
 
 **Telegram Bot**
 | Field | Description |
@@ -87,7 +87,7 @@ To get your chat ID: start the bot and visit `https://api.telegram.org/bot<TOKEN
 **Ntfy.sh**
 | Field | Default |
 |---|---|
-| Topic | e.g. `farmor-larm-hemma` |
+| Topic | e.g. `grandma-alerts-home` |
 | Server URL | `https://ntfy.sh` (or self-hosted) |
 
 **AI Messages** (optional)
@@ -129,9 +129,9 @@ Add the custom Lovelace card to any dashboard:
 
 ```yaml
 type: custom:caregiver-card
-entity_prefix: farmor        # lowercase person name, spaces → underscore
-name: Farmor                 # display name
-entry_id: <config_entry_id>  # required for the "Action taken" button
+entity_prefix: grandma      # lowercase person name, spaces → underscore
+name: Grandma               # display name
+entry_id: <config_entry_id> # required for the "Action taken" button
 ```
 
 To find your `config_entry_id`: **Settings → Integrations → Caregiver Mode → Configure** — the ID is visible in the browser URL as the last path segment.
@@ -139,7 +139,7 @@ To find your `config_entry_id`: **Settings → Integrations → Caregiver Mode �
 When a fall is detected the card shows:
 - A pulsing orange banner
 - The camera snapshot taken at detection
-- A green **"✓ Åtgärd vidtagen — Stäng larm"** button that clears the alert and deletes the image
+- A green **"Action taken"** button that clears the alert and deletes the image
 
 ## Services
 
@@ -154,13 +154,13 @@ All services require `config_entry_id` — find it in the integration URL as des
 ## Example Alert Messages
 
 Inactivity alert (no AI):
-> Farmor registrerades senast i Köket kl 08:42. Det är nu 13:15 (onsdag) — 4h 33min utan rörelse.
+> Grandma was last seen in the Kitchen at 08:42. It is now 13:15 (Wednesday) — 4h 33min without motion.
 
-With AI:
-> Farmor har inte rört sig sedan 08:42 i Köket. Det är nu halvtiden på eftermiddagen — kanske värt att ringa och höra hur det är?
+With AI enabled:
+> Grandma hasn't moved since 08:42 in the Kitchen. It's now mid-afternoon — might be worth giving her a call to check in?
 
 Fall detection alert:
-> 🚨 FALL DETEKTERAT – Farmor. Farmor kan ha fallit. Kameraanalysen visade en person liggande på golvet. Kontrollera omedelbart!
+> 🚨 FALL DETECTED – Grandma may have fallen. The camera analysis showed a person lying on the floor. Please check immediately!
 
 ## Integration Icon (HA 2026.3+)
 
@@ -172,9 +172,9 @@ custom_components/caregiver_mode/brand/icon.png
 
 Optional variants: `dark_icon.png`, `logo.png`, `logo@2x.png`. Recommended size: 256×256 px PNG.
 
-## Stöd projektet
+## Support
 
-Gillar du det här projektet? En kopp kaffe uppskattas ☕
+If you find this useful, a coffee is always appreciated ☕
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/wizz666)
 
