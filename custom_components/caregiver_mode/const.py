@@ -76,6 +76,17 @@ CONF_GROQ_VISION_MODEL = "groq_vision_model"
 
 FALL_POLL_INTERVAL = 60  # seconds between fall detection snapshots
 
+# Pattern learning (V3.0)
+CONF_PATTERN_ENABLED = "pattern_learning_enabled"
+CONF_ANOMALY_ALERT_ENABLED = "anomaly_alert_enabled"
+CONF_ANOMALY_ALERT_THRESHOLD = "anomaly_alert_threshold"
+DEFAULT_PATTERN_ENABLED = True
+DEFAULT_ANOMALY_ALERT_ENABLED = False
+DEFAULT_ANOMALY_ALERT_THRESHOLD = 75
+PATTERN_MIN_DAYS = 7
+PATTERN_HISTORY_DAYS = 60
+NIGHTLY_JOB_TIME = "02:00:00"
+
 VISION_PROVIDER_GROQ = "groq"
 VISION_PROVIDER_OLLAMA = "ollama"
 VISION_PROVIDER_ANTHROPIC = "anthropic"
@@ -93,6 +104,7 @@ SUFFIX_LAST_SEEN = "last_seen"
 SUFFIX_LAST_ROOM = "last_room"
 SUFFIX_ALERT = "alert"
 SUFFIX_FALL = "fall_detected"
+SUFFIX_ANOMALY = "anomaly_score"
 
 # Weekday names per language
 WEEKDAYS: dict[str, list[str]] = {
@@ -127,6 +139,12 @@ MESSAGES: dict[str, dict] = {
         ),
         "inactivity_reason": "No motion for {minutes} min (threshold: {hours}h)",
         "inactivity_title": "⚠️ Caregiver – {name}",
+        "early_warning_title": "⚠️ Early warning – {name}",
+        "early_warning_message": (
+            "{name} has not been seen this morning. "
+            "Expected first movement around {expected}. "
+            "Current anomaly score: {score}/100."
+        ),
         "departure": {
             "tracker_left": (
                 "📱 {name} has left home",
@@ -173,6 +191,12 @@ MESSAGES: dict[str, dict] = {
         ),
         "inactivity_reason": "Ingen rörelse på {minutes} minuter (gräns {hours} timmar)",
         "inactivity_title": "⚠️ Caregiver – {name}",
+        "early_warning_title": "⚠️ Tidig varning – {name}",
+        "early_warning_message": (
+            "{name} har inte synts till i morse. "
+            "Förväntad första rörelse runt {expected}. "
+            "Avvikelsespoäng: {score}/100."
+        ),
         "departure": {
             "tracker_left": (
                 "📱 {name} har lämnat hemmet",

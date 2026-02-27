@@ -13,6 +13,7 @@ from .const import (
     SUFFIX_STATUS,
     SUFFIX_LAST_SEEN,
     SUFFIX_LAST_ROOM,
+    SUFFIX_ANOMALY,
 )
 
 
@@ -31,6 +32,7 @@ async def async_setup_entry(
             CaregiverStatusSensor(coordinator, entry, slug, person_name),
             CaregiverLastSeenSensor(coordinator, entry, slug, person_name),
             CaregiverLastRoomSensor(coordinator, entry, slug, person_name),
+            CaregiverAnomalyScoreSensor(coordinator, entry, slug, person_name),
         ]
     )
 
@@ -148,3 +150,48 @@ class CaregiverLastRoomSensor(CaregiverBaseSensor):
     @property
     def native_value(self) -> str:
         return self._coordinator.last_motion_room or STATUS_UNKNOWN
+
+
+class CaregiverAnomalyScoreSensor(CaregiverBaseSensor):
+    """Sensor reporting the current anomaly score (0–100, or 'learning')."""
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_{self._slug}_{SUFFIX_ANOMALY}"
+
+    @property
+    def name(self) -> str:
+        return "Anomaly Score"
+
+    @property
+    def icon(self) -> str:
+        score = self._coordinator.anomaly_score
+        if score == -1:
+            return "mdi:chart-bell-curve"
+        if score >= 80:
+            return "mdi:alert-circle"
+        if score >= 60:
+            return "mdi:alert"
+        if score >= 30:
+            return "mdi:chart-bell-curve-cumulative"
+        return "mdi:check-circle-outline"
+
+    @property
+    def native_value(self):
+        score = self._coordinator.anomaly_score
+        if score == -1:
+            return "learning"
+        return score
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        c = self._coordinator
+        p = c.pattern
+        return {
+            "days_learned": p.days_learned,
+            "confidence": p.confidence,
+            "expected_first_motion": p.expected_first_motion_today,
+            "anomaly_reason": c.anomaly_reason,
+            "pattern_enabled": c.pattern_enabled,
+            "alert_threshold": c.anomaly_alert_threshold,
+        }

@@ -94,7 +94,8 @@
           "notifications": "Notification channels",
           "departure": "Departure detection",
           "camera": "Fall detection (camera & AI)",
-          "language": "Notification language"
+          "language": "Notification language",
+          "pattern": "Pattern learning (anomaly detection)"
         }
       },
       "timing": {
@@ -187,6 +188,15 @@
           "ollama_url": "Ollama server URL",
           "ollama_model": "Ollama model name",
           "fall_confirm_count": "Consecutive detections before alert (1–5)"
+        }
+      },
+      "pattern": {
+        "title": "Caregiver Mode – Pattern Learning",
+        "description": "Pattern learning observes the person's daily rhythm and computes an anomaly score (0–100). After 7 days of data the sensor becomes active.\n\nEnable 'Early warning alerts' to get notified when the score exceeds the threshold — before the normal inactivity alert fires.",
+        "data": {
+          "pattern_learning_enabled": "Enable pattern learning",
+          "anomaly_alert_enabled": "Enable early warning alerts",
+          "anomaly_alert_threshold": "Early warning threshold (50–100)"
         }
       }
     },

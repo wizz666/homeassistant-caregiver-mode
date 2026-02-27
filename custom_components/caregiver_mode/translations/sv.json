@@ -94,7 +94,8 @@
           "notifications": "Notifikationskanaler",
           "departure": "Hemlämnig-detektion",
           "camera": "Falldetektering (kamera & AI)",
-          "language": "Notifikationsspråk"
+          "language": "Notifikationsspråk",
+          "pattern": "Mönsterinlärning (avvikelsedetektering)"
         }
       },
       "timing": {
@@ -187,6 +188,15 @@
           "ollama_url": "Ollama server-URL",
           "ollama_model": "Ollama-modellnamn",
           "fall_confirm_count": "Positiva detekteringar i rad innan larm (1–5)"
+        }
+      },
+      "pattern": {
+        "title": "Caregiver Mode – Mönsterinlärning",
+        "description": "Mönsterinlärning observerar personens dygnsrytm och beräknar en avvikelsespoäng (0–100). Sensorn aktiveras efter 7 dagars data.\n\nAktivera 'Tidiga varningsnotiser' för att notifieras när poängen överstiger tröskeln — innan det vanliga inaktivitetslarmet utlöses.",
+        "data": {
+          "pattern_learning_enabled": "Aktivera mönsterinlärning",
+          "anomaly_alert_enabled": "Aktivera tidiga varningsnotiser",
+          "anomaly_alert_threshold": "Tröskel för tidig varning (50–100)"
         }
       }
     },

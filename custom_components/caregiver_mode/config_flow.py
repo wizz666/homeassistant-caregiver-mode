@@ -38,6 +38,9 @@ from .const import (
     CONF_FALL_CONFIRM_COUNT,
     CONF_GROQ_VISION_MODEL,
     CONF_LANGUAGE,
+    CONF_PATTERN_ENABLED,
+    CONF_ANOMALY_ALERT_ENABLED,
+    CONF_ANOMALY_ALERT_THRESHOLD,
     DEFAULT_NTFY_SERVER,
     DEFAULT_PERSON_NAME,
     DEFAULT_ACTIVE_START,
@@ -50,6 +53,9 @@ from .const import (
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_GROQ_VISION_MODEL,
     DEFAULT_FALL_CONFIRM_COUNT,
+    DEFAULT_PATTERN_ENABLED,
+    DEFAULT_ANOMALY_ALERT_ENABLED,
+    DEFAULT_ANOMALY_ALERT_THRESHOLD,
     LANGUAGES,
     AI_PROVIDERS,
     AI_PROVIDER_GROQ,
@@ -551,6 +557,8 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_camera()
             if action == "language":
                 return await self.async_step_language()
+            if action == "pattern":
+                return await self.async_step_pattern()
 
         schema = vol.Schema(
             {
@@ -562,6 +570,7 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                         ("departure", "Departure detection (phone & door)"),
                         ("camera", "Fall detection (camera & AI)"),
                         ("language", "Notification language"),
+                        ("pattern", "Pattern learning (anomaly detection)"),
                     ]
                 )
             }
@@ -1006,3 +1015,35 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="camera", data_schema=schema, errors=errors
         )
+
+    # ------------------------------------------------------------------
+    # Pattern learning section
+    # ------------------------------------------------------------------
+
+    async def async_step_pattern(self, user_input=None):
+        """Configure pattern learning and anomaly detection."""
+        merged = self._merged()
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title="", data=self._save_options(user_input)
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_PATTERN_ENABLED,
+                    default=merged.get(CONF_PATTERN_ENABLED, DEFAULT_PATTERN_ENABLED),
+                ): bool,
+                vol.Optional(
+                    CONF_ANOMALY_ALERT_ENABLED,
+                    default=merged.get(CONF_ANOMALY_ALERT_ENABLED, DEFAULT_ANOMALY_ALERT_ENABLED),
+                ): bool,
+                vol.Optional(
+                    CONF_ANOMALY_ALERT_THRESHOLD,
+                    default=merged.get(CONF_ANOMALY_ALERT_THRESHOLD, DEFAULT_ANOMALY_ALERT_THRESHOLD),
+                ): vol.All(int, vol.Range(min=50, max=100)),
+            }
+        )
+
+        return self.async_show_form(step_id="pattern", data_schema=schema)

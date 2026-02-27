@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Callable
 
 from homeassistant.config_entries import ConfigEntry
@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant, Event, callback
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
+    async_track_time_change,
     async_track_time_interval,
 )
 
@@ -44,6 +45,9 @@ from .const import (
     CONF_FALL_CONFIRM_COUNT,
     CONF_GROQ_VISION_MODEL,
     CONF_LANGUAGE,
+    CONF_PATTERN_ENABLED,
+    CONF_ANOMALY_ALERT_ENABLED,
+    CONF_ANOMALY_ALERT_THRESHOLD,
     DEFAULT_NTFY_SERVER,
     DEFAULT_DEPARTURE_DELAY,
     DEFAULT_LANGUAGE,
@@ -51,6 +55,9 @@ from .const import (
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_GROQ_VISION_MODEL,
     DEFAULT_FALL_CONFIRM_COUNT,
+    DEFAULT_PATTERN_ENABLED,
+    DEFAULT_ANOMALY_ALERT_ENABLED,
+    DEFAULT_ANOMALY_ALERT_THRESHOLD,
     CHECK_INTERVAL,
     FALL_POLL_INTERVAL,
     STATUS_ACTIVE,
@@ -67,6 +74,7 @@ from .const import (
     WEEKDAYS,
     MESSAGES,
 )
+from .pattern import CaregiverPatternLearner
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -219,12 +227,24 @@ class CaregiverCoordinator:
         self._fall_check_active: bool = False
         self._fall_snapshot_path: str = ""  # /local/caregiver_snapshot_slug.jpg
 
+        # Pattern learning (V3.0)
+        self.pattern_enabled: bool = data.get(CONF_PATTERN_ENABLED, DEFAULT_PATTERN_ENABLED)
+        self.anomaly_alert_enabled: bool = data.get(CONF_ANOMALY_ALERT_ENABLED, DEFAULT_ANOMALY_ALERT_ENABLED)
+        self.anomaly_alert_threshold: int = data.get(CONF_ANOMALY_ALERT_THRESHOLD, DEFAULT_ANOMALY_ALERT_THRESHOLD)
+        self.anomaly_score: int = -1
+        self.anomaly_reason: str = ""
+        self._last_early_warning_sent: datetime | None = None
+        # pattern is initialized in async_setup after slug is known
+        slug = self.person_name.lower().replace(" ", "_")
+        self.pattern: CaregiverPatternLearner = CaregiverPatternLearner(slug, self.hass)
+
         # Subscriptions
         self._unsub_motion: Callable | None = None
         self._unsub_exit: Callable | None = None
         self._unsub_tracker: Callable | None = None
         self._unsub_timer: Callable | None = None
         self._unsub_fall_timer: Callable | None = None
+        self._unsub_nightly: Callable | None = None
 
     # -----------------------------------------------------------------
     # Setup / teardown
@@ -232,6 +252,10 @@ class CaregiverCoordinator:
 
     async def async_setup(self) -> None:
         """Subscribe to sensor state changes and start periodic check."""
+        # Load persisted pattern data
+        if self.pattern_enabled:
+            await self.pattern.async_load()
+
         # Motion sensors
         sensor_ids = list(self.sensor_room_map.keys())
         if sensor_ids:
@@ -266,6 +290,18 @@ class CaregiverCoordinator:
             timedelta(seconds=CHECK_INTERVAL),
         )
 
+        # Nightly pattern job at 02:00
+        if self.pattern_enabled:
+            self._unsub_nightly = async_track_time_change(
+                self.hass,
+                self._nightly_tick,
+                hour=2, minute=0, second=0,
+            )
+            _LOGGER.debug(
+                "Caregiver [%s]: nightly pattern job scheduled at 02:00",
+                self.person_name,
+            )
+
         # Fall detection timer (only if camera configured)
         if self.camera_entity:
             self._unsub_fall_timer = async_track_time_interval(
@@ -286,6 +322,7 @@ class CaregiverCoordinator:
             self._unsub_tracker,
             self._unsub_timer,
             self._unsub_fall_timer,
+            self._unsub_nightly,
         ]:
             if unsub:
                 unsub()
@@ -348,8 +385,13 @@ class CaregiverCoordinator:
 
         _LOGGER.debug("Caregiver [%s]: motion in %s", self.person_name, room)
 
-        self.last_motion_time = datetime.now().astimezone()
+        now_ts = datetime.now().astimezone()
+        self.last_motion_time = now_ts
         self.last_motion_room = room
+
+        # Pattern learning
+        if self.pattern_enabled:
+            self.pattern.record_motion(now_ts, room)
 
         if self.alert_active:
             _LOGGER.info(
@@ -867,6 +909,31 @@ class CaregiverCoordinator:
                 self._notify_entities()
             return
 
+        # Update anomaly score
+        if self.pattern_enabled:
+            check_now = now if now is not None else datetime.now().astimezone()
+            score, reason = self.pattern.get_anomaly_score(check_now, self.active_start)
+            score_changed = (score != self.anomaly_score or reason != self.anomaly_reason)
+            self.anomaly_score = score
+            self.anomaly_reason = reason
+            if score_changed:
+                self._notify_entities()
+
+            # Early warning (only if anomaly alert enabled and no active inactivity alert)
+            if (
+                self.anomaly_alert_enabled
+                and score >= self.anomaly_alert_threshold
+                and not self.alert_active
+            ):
+                elapsed_s = (
+                    (datetime.now().astimezone() - self._last_early_warning_sent).total_seconds()
+                    if self._last_early_warning_sent is not None
+                    else float("inf")
+                )
+                if elapsed_s > 3 * 3600:
+                    self._last_early_warning_sent = datetime.now().astimezone()
+                    self.hass.async_create_task(self._send_early_warning())
+
         if self.last_motion_time is None:
             return
 
@@ -895,6 +962,63 @@ class CaregiverCoordinator:
                     elapsed = datetime.now().astimezone() - self._last_alert_sent
                     if elapsed >= timedelta(hours=self.alert_cooldown_hours):
                         self.hass.async_create_task(self._send_alert())
+
+    # -----------------------------------------------------------------
+    # Nightly pattern job (02:00)
+    # -----------------------------------------------------------------
+
+    @callback
+    def _nightly_tick(self, now=None) -> None:
+        """Called at 02:00 — schedule nightly pattern finalization."""
+        self.hass.async_create_task(self._nightly_job())
+
+    async def _nightly_job(self) -> None:
+        """Finalize yesterday's data, recompute model, persist."""
+        if not self.pattern_enabled:
+            return
+        yesterday = (datetime.now() - timedelta(days=1)).date()
+        self.pattern.close_day(yesterday)
+        self.pattern.compute_model()
+        await self.pattern.async_save()
+        self._notify_entities()
+        _LOGGER.info(
+            "Caregiver [%s]: nightly pattern update complete (%d days learned)",
+            self.person_name, self.pattern.days_learned,
+        )
+
+    # -----------------------------------------------------------------
+    # Early warning notification
+    # -----------------------------------------------------------------
+
+    async def _send_early_warning(self) -> None:
+        """Send early warning via all configured channels."""
+        name = self.person_name
+        expected = self.pattern.expected_first_motion_today or "—"
+        score = self.anomaly_score
+        title = self._msg("early_warning_title", name=name)
+        message = self._msg(
+            "early_warning_message", name=name, expected=expected, score=score
+        )
+        tasks = []
+        for svc_full in [self.notify_primary, self.notify_secondary]:
+            if svc_full:
+                tasks.append(self._send_ha_notify(svc_full, title, message))
+        if self.telegram_bot_token and self.telegram_chat_ids:
+            for chat_id in self.telegram_chat_ids:
+                tasks.append(self._send_telegram(chat_id, title, message))
+        if self.ntfy_topic:
+            tasks.append(self._send_ntfy(title, message))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    _LOGGER.error(
+                        "Caregiver [%s]: early warning error: %s", self.person_name, result
+                    )
+        _LOGGER.info(
+            "Caregiver [%s]: early warning sent (score=%d)", self.person_name, score
+        )
 
     # -----------------------------------------------------------------
     # Inactivity alert sending
