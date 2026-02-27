@@ -12,12 +12,20 @@
           "alert_cooldown": "Alert cooldown (hours between repeated alerts)"
         }
       },
-      "sensors": {
-        "title": "Caregiver Mode – Select Sensors",
-        "description": "Select motion/occupancy sensors to monitor. You can assign room names after setup via the integration options.",
+      "rooms": {
+        "title": "Caregiver Mode – Rooms",
+        "description": "Configured rooms:\n{rooms_summary}",
+        "menu_options": {
+          "add_room": "Add a room",
+          "done_rooms": "Done – continue to notifications"
+        }
+      },
+      "add_room": {
+        "title": "Add Room",
+        "description": "Give the room a name and select the motion sensors located in it.",
         "data": {
-          "motion_sensors": "Motion sensors to monitor",
-          "room_names": "Room names (comma-separated, matching sensor order)"
+          "room_name": "Room name (e.g. Bedroom, Kitchen)",
+          "motion_sensors": "Motion sensors in this room"
         }
       },
       "notifications": {
@@ -39,6 +47,8 @@
     "error": {
       "invalid_time": "Invalid time format. Use HH:MM.",
       "no_sensors": "At least one sensor must be selected.",
+      "room_name_required": "Room name cannot be empty.",
+      "room_name_exists": "A room with this name already exists.",
       "invalid_notify": "Notification service must start with 'notify.'",
       "ai_key_required": "API key is required when AI messages are enabled.",
       "telegram_chat_id_required": "At least one Telegram chat ID is required when a bot token is provided.",
@@ -46,6 +56,69 @@
     },
     "abort": {
       "already_configured": "This person is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Caregiver Mode – Basic Settings",
+        "description": "Update monitoring time window and alert thresholds.",
+        "data": {
+          "active_start": "Active hours start (HH:MM)",
+          "active_end": "Active hours end (HH:MM)",
+          "alert_delay": "Alert after X hours without motion",
+          "alert_cooldown": "Alert cooldown (hours between repeated alerts)"
+        }
+      },
+      "rooms": {
+        "title": "Caregiver Mode – Rooms",
+        "description": "Configured rooms:\n{rooms_summary}",
+        "menu_options": {
+          "add_room": "Add a room",
+          "remove_room": "Remove a room",
+          "done_rooms": "Done – continue to notifications"
+        }
+      },
+      "add_room": {
+        "title": "Add Room",
+        "description": "Give the room a name and select the motion sensors located in it.",
+        "data": {
+          "room_name": "Room name (e.g. Bedroom, Kitchen)",
+          "motion_sensors": "Motion sensors in this room"
+        }
+      },
+      "remove_room": {
+        "title": "Remove Room",
+        "description": "Select which room to remove. Its sensors will become available again.",
+        "data": {
+          "room_name": "Room to remove"
+        }
+      },
+      "notifications": {
+        "title": "Caregiver Mode – Notifications",
+        "description": "Configure how alerts are sent. At least one channel (HA app, Telegram, or Ntfy) must be configured.",
+        "data": {
+          "notify_primary": "Primary notification service (e.g. notify.mobile_app_iphone)",
+          "notify_secondary": "Secondary notification service (optional)",
+          "telegram_bot_token": "Telegram bot token",
+          "telegram_chat_ids": "Telegram chat ID(s) (comma-separated)",
+          "ntfy_topic": "Ntfy.sh topic",
+          "ntfy_server": "Ntfy.sh server URL",
+          "ai_enabled": "Enable AI-generated alert messages",
+          "ai_provider": "AI provider",
+          "ai_api_key": "AI API key"
+        }
+      }
+    },
+    "error": {
+      "invalid_time": "Invalid time format. Use HH:MM.",
+      "no_sensors": "At least one sensor must be selected.",
+      "room_name_required": "Room name cannot be empty.",
+      "room_name_exists": "A room with this name already exists.",
+      "invalid_notify": "Notification service must start with 'notify.'",
+      "ai_key_required": "API key is required when AI messages are enabled.",
+      "telegram_chat_id_required": "At least one Telegram chat ID is required when a bot token is provided.",
+      "no_channel_configured": "At least one notification channel must be configured (HA app, Telegram, or Ntfy)."
     }
   },
   "entity": {

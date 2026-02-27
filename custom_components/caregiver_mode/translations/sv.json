@@ -12,12 +12,20 @@
           "alert_cooldown": "Larmkylning (timmar mellan upprepade larm)"
         }
       },
-      "sensors": {
-        "title": "Caregiver Mode – Välj sensorer",
-        "description": "Välj rörelsesensorer att övervaka. Du kan tilldela rumsnamn efter installation via integrationsinställningarna.",
+      "rooms": {
+        "title": "Caregiver Mode – Rum",
+        "description": "Konfigurerade rum:\n{rooms_summary}",
+        "menu_options": {
+          "add_room": "Lägg till ett rum",
+          "done_rooms": "Klar – fortsätt till notifikationer"
+        }
+      },
+      "add_room": {
+        "title": "Lägg till rum",
+        "description": "Ge rummet ett namn och välj vilka rörelsesensorer som finns i det.",
         "data": {
-          "motion_sensors": "Rörelsesensorer att övervaka",
-          "room_names": "Rumsnamn (kommaseparerade, i samma ordning som sensorerna)"
+          "room_name": "Rumsnamn (t.ex. Sovrum, Kök)",
+          "motion_sensors": "Rörelsesensorer i detta rum"
         }
       },
       "notifications": {
@@ -39,6 +47,8 @@
     "error": {
       "invalid_time": "Ogiltigt tidsformat. Använd HH:MM.",
       "no_sensors": "Minst en sensor måste väljas.",
+      "room_name_required": "Rumsnamnet får inte vara tomt.",
+      "room_name_exists": "Ett rum med det namnet finns redan.",
       "invalid_notify": "Notifikationstjänsten måste börja med 'notify.'",
       "ai_key_required": "API-nyckel krävs när AI-meddelanden är aktiverade.",
       "telegram_chat_id_required": "Minst ett Telegram chat-ID krävs när ett bot-token angetts.",
@@ -46,6 +56,69 @@
     },
     "abort": {
       "already_configured": "Den här personen är redan konfigurerad."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Caregiver Mode – Grundinställningar",
+        "description": "Uppdatera tidsfönster och larmnivåer.",
+        "data": {
+          "active_start": "Aktiva timmar start (HH:MM)",
+          "active_end": "Aktiva timmar slut (HH:MM)",
+          "alert_delay": "Larm efter X timmar utan rörelse",
+          "alert_cooldown": "Larmkylning (timmar mellan upprepade larm)"
+        }
+      },
+      "rooms": {
+        "title": "Caregiver Mode – Rum",
+        "description": "Konfigurerade rum:\n{rooms_summary}",
+        "menu_options": {
+          "add_room": "Lägg till ett rum",
+          "remove_room": "Ta bort ett rum",
+          "done_rooms": "Klar – fortsätt till notifikationer"
+        }
+      },
+      "add_room": {
+        "title": "Lägg till rum",
+        "description": "Ge rummet ett namn och välj vilka rörelsesensorer som finns i det.",
+        "data": {
+          "room_name": "Rumsnamn (t.ex. Sovrum, Kök)",
+          "motion_sensors": "Rörelsesensorer i detta rum"
+        }
+      },
+      "remove_room": {
+        "title": "Ta bort rum",
+        "description": "Välj vilket rum du vill ta bort. Sensorerna i rummet blir tillgängliga igen.",
+        "data": {
+          "room_name": "Rum att ta bort"
+        }
+      },
+      "notifications": {
+        "title": "Caregiver Mode – Notifikationer",
+        "description": "Konfigurera hur larm skickas. Minst en kanal (HA-app, Telegram eller Ntfy) måste konfigureras.",
+        "data": {
+          "notify_primary": "Primär notifikationstjänst (t.ex. notify.mobile_app_iphone)",
+          "notify_secondary": "Sekundär notifikationstjänst (valfri)",
+          "telegram_bot_token": "Telegram bot-token",
+          "telegram_chat_ids": "Telegram chat-ID(n) (kommaseparerade)",
+          "ntfy_topic": "Ntfy.sh ämne (topic)",
+          "ntfy_server": "Ntfy.sh server-URL",
+          "ai_enabled": "Aktivera AI-genererade larmmeddelanden",
+          "ai_provider": "AI-leverantör",
+          "ai_api_key": "AI API-nyckel"
+        }
+      }
+    },
+    "error": {
+      "invalid_time": "Ogiltigt tidsformat. Använd HH:MM.",
+      "no_sensors": "Minst en sensor måste väljas.",
+      "room_name_required": "Rumsnamnet får inte vara tomt.",
+      "room_name_exists": "Ett rum med det namnet finns redan.",
+      "invalid_notify": "Notifikationstjänsten måste börja med 'notify.'",
+      "ai_key_required": "API-nyckel krävs när AI-meddelanden är aktiverade.",
+      "telegram_chat_id_required": "Minst ett Telegram chat-ID krävs när ett bot-token angetts.",
+      "no_channel_configured": "Minst en notifikationskanal måste konfigureras (HA-app, Telegram eller Ntfy)."
     }
   },
   "entity": {
