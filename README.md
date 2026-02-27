@@ -4,6 +4,8 @@
 [![Version](https://img.shields.io/badge/version-2.1.2-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support_this_project-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/wizz666)
 
+🇸🇪 [Svenska](README.sv.md) | 🇬🇧 English
+
 AI-assisted motion monitoring for elderly or vulnerable persons living independently. Caregiver Mode watches your motion sensors and sends contextual alerts — via the HA mobile app, Telegram, or Ntfy — if no activity is detected for a configurable number of hours.
 
 **New in V2:** Optional camera-based fall detection powered by vision AI. When a fall is detected, a snapshot is saved, notifications are sent with the image, and the dashboard card shows the photo with a one-tap "Action taken" button.
