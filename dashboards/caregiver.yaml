@@ -16,9 +16,11 @@ views:
           - sensor.caregiver_farsan_last_room
           - binary_sensor.caregiver_farsan_alert_active
           - binary_sensor.caregiver_farsan_fall_detected
-      - type: button
-        name: Testa fall-larm
+      - type: custom:mushroom-template-card
+        primary: Testa fall-larm
+        secondary: Simulerar ett fall-larm för att verifiera notiser
         icon: mdi:test-tube
+        icon_color: orange
         tap_action:
           action: perform-action
           perform_action: caregiver_mode.trigger_test_fall

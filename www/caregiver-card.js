@@ -135,33 +135,55 @@ class CaregiverCard extends HTMLElement {
         :host { display: block; }
 
         .card {
-          background: var(--card-background-color, #fff);
+          background: var(--ha-card-background, var(--card-background-color, #fff));
           border-radius: var(--ha-card-border-radius, 12px);
-          box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,.12));
+          box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,.10));
           overflow: hidden;
           font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
         }
 
         ${pulseStyle}
 
+        /* ── Banners ── */
+        .banner {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          padding: 6px 14px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: .5px;
+          text-transform: uppercase;
+        }
+        .banner-fall {
+          background: #BF360C;
+          color: #fff;
+          display: ${fallActive ? 'flex' : 'none'};
+          animation: pulse 0.9s ease-in-out infinite;
+        }
+        .banner-alert {
+          background: #B71C1C;
+          color: #fff;
+          display: ${alertActive && !fallActive ? 'flex' : 'none'};
+        }
+
+        /* ── Header ── */
         .header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 14px 16px;
+          padding: 12px 14px;
           background: ${color.bg};
-          border-left: 5px solid ${color.border};
+          border-left: 4px solid ${color.border};
         }
-
         .person {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 9px;
         }
-
         .person-icon {
-          width: 36px;
-          height: 36px;
+          width: 32px;
+          height: 32px;
           border-radius: 50%;
           background: ${color.border};
           display: flex;
@@ -169,124 +191,87 @@ class CaregiverCard extends HTMLElement {
           justify-content: center;
           flex-shrink: 0;
         }
-
-        .person-icon span {
-          font-size: 1.3rem;
-          line-height: 1;
-        }
-
+        .person-icon span { font-size: 1.1rem; line-height: 1; }
         .person-name {
-          font-size: 1.1rem;
+          font-size: 1rem;
           font-weight: 600;
           color: var(--primary-text-color);
         }
-
         .badge {
+          display: flex;
+          align-items: center;
+          gap: 5px;
           background: ${color.badge};
-          color: ${color.text};
+          color: #fff;
           border-radius: 20px;
-          padding: 4px 14px;
-          font-size: 0.78rem;
+          padding: 3px 11px 3px 7px;
+          font-size: 0.7rem;
           font-weight: 700;
-          letter-spacing: .8px;
+          letter-spacing: .5px;
           text-transform: uppercase;
           white-space: nowrap;
         }
-
-        .body {
-          padding: 12px 16px 14px;
+        .badge-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: rgba(255,255,255,.65);
+          flex-shrink: 0;
         }
 
-        .row {
-          display: flex;
-          align-items: center;
-          padding: 5px 0;
-          font-size: 0.92rem;
-          border-bottom: 1px solid var(--divider-color, rgba(0,0,0,.08));
-        }
-
-        .row:last-child {
-          border-bottom: none;
-          padding-bottom: 0;
-        }
-
-        .row-label {
-          color: var(--secondary-text-color);
-          flex: 1;
-        }
-
-        .row-value {
-          font-weight: 500;
-          color: var(--primary-text-color);
-          text-align: right;
-        }
-
-        .alert-strip {
-          background: #F44336;
-          color: #fff;
-          text-align: center;
-          padding: 5px 8px;
-          font-size: 0.8rem;
-          font-weight: 700;
-          letter-spacing: 1px;
-          display: ${alertActive ? 'block' : 'none'};
-        }
-
-        .fall-strip {
-          background: #E65100;
-          color: #fff;
-          text-align: center;
-          padding: 5px 8px;
-          font-size: 0.8rem;
-          font-weight: 700;
-          letter-spacing: 1px;
-          display: ${fallActive ? 'block' : 'none'};
-          animation: pulse 0.9s ease-in-out infinite;
-        }
-
-        .snapshot-section {
+        /* ── Snapshot ── */
+        .snapshot-wrap {
           display: ${fallActive && snapshotUrl ? 'block' : 'none'};
-          padding: 12px 16px 0;
+          padding: 10px 12px 0;
         }
-
-        .snapshot-section img {
+        .snapshot-label {
+          font-size: 0.7rem;
+          color: var(--secondary-text-color);
+          margin-bottom: 5px;
+          text-transform: uppercase;
+          letter-spacing: .4px;
+        }
+        .snapshot-wrap img {
           width: 100%;
-          border-radius: 8px;
-          border: 2px solid #E65100;
+          border-radius: 7px;
+          border: 2px solid #BF360C;
           display: block;
         }
 
-        .snapshot-label {
-          font-size: 0.75rem;
-          color: var(--secondary-text-color);
-          margin-bottom: 6px;
-          text-transform: uppercase;
-          letter-spacing: .6px;
+        /* ── Body rows ── */
+        .body {
+          padding: 6px 0 10px;
         }
+        .row {
+          display: flex;
+          align-items: center;
+          padding: 6px 14px;
+          font-size: 0.87rem;
+        }
+        .row-label { color: var(--secondary-text-color); flex: 1; }
+        .row-value { font-weight: 500; color: var(--primary-text-color); }
 
+        /* ── Action button ── */
         .action-btn {
           display: ${fallActive && hasEntryId ? 'block' : 'none'};
-          width: 100%;
-          margin: 12px 0 0;
-          padding: 10px 0;
-          background: #4CAF50;
+          width: calc(100% - 24px);
+          margin: 2px 12px 12px;
+          padding: 9px 0;
+          background: #2E7D32;
           color: #fff;
           border: none;
           border-radius: 8px;
-          font-size: 0.95rem;
-          font-weight: 700;
+          font-size: 0.87rem;
+          font-weight: 600;
           cursor: pointer;
-          letter-spacing: .5px;
+          letter-spacing: .3px;
         }
-
-        .action-btn:hover {
-          background: #388E3C;
-        }
+        .action-btn:active { background: #1B5E20; }
       </style>
 
       <div class="card">
-        ${fallActive ? '<div class="fall-strip">🚨 FALL DETEKTERAT — KONTAKTA OMEDELBART</div>' : ''}
-        ${alertActive ? '<div class="alert-strip">⚠ LARM AKTIVT — KONTAKTA NU</div>' : ''}
+        <div class="banner banner-fall">🚨 Fall detekterat — kontakta omedelbart</div>
+        <div class="banner banner-alert">⚠ Larm aktivt — kontakta nu</div>
         <div class="header">
           <div class="person">
             <div class="person-icon">
@@ -294,10 +279,10 @@ class CaregiverCard extends HTMLElement {
             </div>
             <span class="person-name">${personName}</span>
           </div>
-          <span class="badge">${label}</span>
+          <span class="badge"><span class="badge-dot"></span>${label}</span>
         </div>
         ${fallActive && snapshotUrl ? `
-        <div class="snapshot-section">
+        <div class="snapshot-wrap">
           <div class="snapshot-label">📷 Kamerabild vid detektering</div>
           <img src="${snapshotUrl}?t=${encodeURIComponent(fallSince)}" alt="Fall snapshot" />
         </div>` : ''}
@@ -310,11 +295,8 @@ class CaregiverCard extends HTMLElement {
             <span class="row-label">Senaste rum</span>
             <span class="row-value">${room}</span>
           </div>
-          ${fallActive && hasEntryId ? `
-          <div class="row" style="border-bottom:none;padding-top:10px;">
-            <button class="action-btn" id="clear-fall-btn">✓ Åtgärd vidtagen — Stäng larm</button>
-          </div>` : ''}
         </div>
+        <button class="action-btn" id="clear-fall-btn">✓ Åtgärd vidtagen — Stäng larm</button>
       </div>
     `;
     this._bindEvents();
