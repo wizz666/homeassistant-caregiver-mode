@@ -42,6 +42,15 @@
           "ai_provider": "AI-leverantör",
           "ai_api_key": "AI API-nyckel"
         }
+      },
+      "departure": {
+        "title": "Caregiver Mode – Hemlämnig-detektion",
+        "description": "Valfritt: identifiera när personen lämnar hemmet. Hoppa över om det inte behövs.",
+        "data": {
+          "device_tracker": "Telefon / person-tracker (valfri)",
+          "exit_sensors": "Ytterdörrsensorer (entrédörr, bakdörr, m.m.)",
+          "departure_delay": "Minuter att vänta efter att dörren stängts (1–15)"
+        }
       }
     },
     "error": {
@@ -61,6 +70,9 @@
   "options": {
     "step": {
       "init": {
+        "title": "Caregiver Mode – Konfigurera"
+      },
+      "configure": {
         "title": "Caregiver Mode – Konfigurera",
         "menu_options": {
           "timing": "Tidsinställningar & larmnivåer",
@@ -130,6 +142,15 @@
           "ai_enabled": "Aktivera AI-genererade larmmeddelanden",
           "ai_provider": "AI-leverantör",
           "ai_api_key": "AI API-nyckel"
+        }
+      },
+      "departure": {
+        "title": "Caregiver Mode – Hemlämnig-detektion",
+        "description": "Identifiera när personen lämnar hemmet. Ändringar sparas direkt.",
+        "data": {
+          "device_tracker": "Telefon / person-tracker (valfri)",
+          "exit_sensors": "Ytterdörrsensorer (entrédörr, bakdörr, m.m.)",
+          "departure_delay": "Minuter att vänta efter att dörren stängts (1–15)"
         }
       }
     },

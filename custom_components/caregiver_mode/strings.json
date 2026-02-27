@@ -42,6 +42,15 @@
           "ai_provider": "AI provider",
           "ai_api_key": "AI API key"
         }
+      },
+      "departure": {
+        "title": "Caregiver Mode – Departure Detection",
+        "description": "Optional: detect when the person leaves home. Skip this step if not needed.",
+        "data": {
+          "device_tracker": "Phone / person tracker (optional)",
+          "exit_sensors": "Exit door sensors (front door, back door, etc.)",
+          "departure_delay": "Minutes to wait after door closes before checking (1–15)"
+        }
       }
     },
     "error": {
@@ -61,6 +70,9 @@
   "options": {
     "step": {
       "init": {
+        "title": "Caregiver Mode – Configure"
+      },
+      "configure": {
         "title": "Caregiver Mode – Configure",
         "menu_options": {
           "timing": "Timing & alert thresholds",
@@ -130,6 +142,15 @@
           "ai_enabled": "Enable AI-generated alert messages",
           "ai_provider": "AI provider",
           "ai_api_key": "AI API key"
+        }
+      },
+      "departure": {
+        "title": "Caregiver Mode – Departure Detection",
+        "description": "Detect when the person leaves home. Changes are saved immediately.",
+        "data": {
+          "device_tracker": "Phone / person tracker (optional)",
+          "exit_sensors": "Exit door sensors (front door, back door, etc.)",
+          "departure_delay": "Minutes to wait after door closes before checking (1–15)"
         }
       }
     },

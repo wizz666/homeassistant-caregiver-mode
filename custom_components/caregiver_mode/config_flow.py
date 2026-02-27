@@ -5,7 +5,7 @@ import re
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
 from .const import (
@@ -27,36 +27,68 @@ from .const import (
     CONF_TELEGRAM_CHAT_IDS,
     CONF_NTFY_TOPIC,
     CONF_NTFY_SERVER,
+    CONF_DEVICE_TRACKER,
+    CONF_EXIT_SENSORS,
+    CONF_DEPARTURE_DELAY,
     DEFAULT_NTFY_SERVER,
     DEFAULT_PERSON_NAME,
     DEFAULT_ACTIVE_START,
     DEFAULT_ACTIVE_END,
     DEFAULT_ALERT_DELAY,
     DEFAULT_ALERT_COOLDOWN,
+    DEFAULT_DEPARTURE_DELAY,
     AI_PROVIDERS,
     AI_PROVIDER_GROQ,
 )
 
 TIME_RE = re.compile(r"^\d{2}:\d{2}$")
 
+CONF_ACTION = "action"
+
 
 def _get_motion_sensors(hass: HomeAssistant) -> list[str]:
-    """Return all binary_sensor entities with device_class motion or occupancy."""
+    """Return binary_sensors suitable for activity detection.
+
+    Includes:
+      - Any sensor with device_class: motion, occupancy, presence,
+        door, opening, window (classified sensors)
+      - Unclassified binary_sensors whose friendly name or entity_id
+        contains motion/presence/PIR-related keywords
+    """
+    ALLOWED_CLASSES = {
+        "motion", "occupancy", "presence",
+        "door", "opening", "window",
+    }
+    KEYWORDS = {
+        "motion", "rörelse", "pir", "presence", "närvaro",
+        "occupancy", "detect",
+    }
     result = []
     for state in hass.states.async_all("binary_sensor"):
         dc = state.attributes.get("device_class", "")
-        if dc in ("motion", "occupancy"):
+        if dc in ALLOWED_CLASSES:
             result.append(state.entity_id)
+            continue
+        if dc == "":
+            name = state.attributes.get("friendly_name", state.entity_id).lower()
+            eid = state.entity_id.lower()
+            if any(kw in name or kw in eid for kw in KEYWORDS):
+                result.append(state.entity_id)
     result.sort()
     return result
 
 
 def _sensor_labels(hass: HomeAssistant, entity_ids: list[str]) -> dict[str, str]:
-    """Return {entity_id: friendly_name} for use in multi_select."""
+    """Return {entity_id: 'Friendly Name (device_class)'} for use in multi_select."""
     result = {}
     for eid in entity_ids:
         state = hass.states.get(eid)
-        label = state.attributes.get("friendly_name", eid) if state else eid
+        if state:
+            name = state.attributes.get("friendly_name", eid)
+            dc = state.attributes.get("device_class", "")
+            label = f"{name} ({dc})" if dc else name
+        else:
+            label = eid
         result[eid] = label
     return result
 
@@ -103,6 +135,48 @@ def _rooms_summary(rooms: dict[str, list[str]], hass: HomeAssistant) -> str:
             labels.append(label)
         lines.append(f"• {room_name}: {', '.join(labels)}")
     return "\n".join(lines)
+
+
+def _get_exit_sensors(hass: HomeAssistant) -> list[str]:
+    """Return door/opening/window binary sensors suitable as exit sensors."""
+    result = []
+    for state in hass.states.async_all("binary_sensor"):
+        dc = state.attributes.get("device_class", "")
+        if dc in ("door", "opening", "window"):
+            result.append(state.entity_id)
+    result.sort()
+    return result
+
+
+def _get_device_trackers(hass: HomeAssistant) -> dict[str, str]:
+    """Return {entity_id: friendly_name} for person and device_tracker entities.
+
+    person.* entities are listed first — they aggregate multiple trackers
+    and are the recommended way to track people in HA.
+    """
+    result = {"": "(Ingen spårning)"}
+    # person.* first (aggregated, recommended)
+    for state in hass.states.async_all("person"):
+        name = state.attributes.get("friendly_name", state.entity_id)
+        result[state.entity_id] = f"👤 {name}"
+    # raw device_tracker.*
+    for state in hass.states.async_all("device_tracker"):
+        name = state.attributes.get("friendly_name", state.entity_id)
+        result[state.entity_id] = f"📱 {name}"
+    return result
+
+
+def _action_selector(options: list[tuple[str, str]]) -> selector.SelectSelector:
+    """Build a dropdown selector from [(value, label), ...] pairs."""
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[
+                selector.SelectOptionDict(value=v, label=l)
+                for v, l in options
+            ],
+            mode=selector.SelectSelectorMode.LIST,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -162,18 +236,32 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------
-    # Step 2: Room management (menu + sub-steps)
+    # Step 2: Room management — dropdown-based
     # ------------------------------------------------------------------
 
     async def async_step_rooms(self, user_input=None):
-        """Room management menu — add rooms until done."""
-        menu_options = ["add_room"]
-        if self._rooms:
-            menu_options.append("done_rooms")
+        """Room management: choose action via dropdown."""
+        if user_input is not None:
+            action = user_input.get(CONF_ACTION)
+            if action == "add_room":
+                return await self.async_step_add_room()
+            if action == "done_rooms":
+                return await self.async_step_done_rooms()
+            if action == "back":
+                return await self.async_step_user()
 
-        return self.async_show_menu(
+        options = [("add_room", "Lägg till ett rum")]
+        if self._rooms:
+            options.append(("done_rooms", "✓ Klar – fortsätt till notifikationer"))
+        options.append(("back", "← Tillbaka till grundinställningar"))
+
+        schema = vol.Schema(
+            {vol.Required(CONF_ACTION, default="add_room"): _action_selector(options)}
+        )
+
+        return self.async_show_form(
             step_id="rooms",
-            menu_options=menu_options,
+            data_schema=schema,
             description_placeholders={
                 "rooms_summary": _rooms_summary(self._rooms, self.hass)
             },
@@ -258,14 +346,7 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not errors:
                 self._data.update(user_input)
-                person_name = self._data[CONF_PERSON_NAME]
-                await self.async_set_unique_id(
-                    f"caregiver_{person_name.lower().replace(' ', '_')}"
-                )
-                self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=f"Caregiver – {person_name}", data=self._data
-                )
+                return await self.async_step_departure()
 
         default_primary = notify_services[0] if notify_services else ""
 
@@ -290,6 +371,37 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="notifications", data_schema=schema, errors=errors
         )
+
+
+    async def async_step_departure(self, user_input=None):
+        """Step 4: Optional departure detection (phone + exit door sensors)."""
+        if user_input is not None:
+            self._data.update(user_input)
+            person_name = self._data[CONF_PERSON_NAME]
+            await self.async_set_unique_id(
+                f"caregiver_{person_name.lower().replace(' ', '_')}"
+            )
+            self._abort_if_unique_id_configured()
+            return self.async_create_entry(
+                title=f"Caregiver – {person_name}", data=self._data
+            )
+
+        exit_sensors = _get_exit_sensors(self.hass)
+        trackers = _get_device_trackers(self.hass)
+
+        schema = vol.Schema(
+            {
+                vol.Optional(CONF_DEVICE_TRACKER, default=""): vol.In(trackers),
+                vol.Optional(CONF_EXIT_SENSORS, default=[]): cv.multi_select(
+                    _sensor_labels(self.hass, exit_sensors)
+                ),
+                vol.Optional(
+                    CONF_DEPARTURE_DELAY, default=DEFAULT_DEPARTURE_DELAY
+                ): vol.All(int, vol.Range(min=1, max=15)),
+            }
+        )
+
+        return self.async_show_form(step_id="departure", data_schema=schema)
 
 
 # ---------------------------------------------------------------------------
@@ -330,15 +442,36 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
         self._rooms_initialized = True
 
     # ------------------------------------------------------------------
-    # Top-level menu
+    # Top-level: dropdown menu
     # ------------------------------------------------------------------
 
     async def async_step_init(self, user_input=None):
-        """Top-level menu: choose what to configure."""
-        return self.async_show_menu(
-            step_id="init",
-            menu_options=["timing", "rooms", "notifications"],
+        """Top-level: choose what to configure."""
+        if user_input is not None:
+            action = user_input.get(CONF_ACTION)
+            if action == "timing":
+                return await self.async_step_timing()
+            if action == "rooms":
+                return await self.async_step_rooms()
+            if action == "notifications":
+                return await self.async_step_notifications()
+            if action == "departure":
+                return await self.async_step_departure()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_ACTION, default="rooms"): _action_selector(
+                    [
+                        ("timing", "Tidsinställningar & larmnivåer"),
+                        ("rooms", "Hantera rum"),
+                        ("notifications", "Notifikationskanaler"),
+                        ("departure", "Hemlämnig-detektion (telefon & dörr)"),
+                    ]
+                )
+            }
         )
+
+        return self.async_show_form(step_id="init", data_schema=schema)
 
     # ------------------------------------------------------------------
     # Timing section
@@ -386,20 +519,42 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
         )
 
     # ------------------------------------------------------------------
-    # Rooms section
+    # Rooms section — dropdown-based
     # ------------------------------------------------------------------
 
     async def async_step_rooms(self, user_input=None):
-        """Room management menu."""
+        """Room management: choose action via dropdown."""
         self._load_rooms()
 
-        menu_options = ["add_room"]
-        if self._rooms:
-            menu_options += ["edit_room", "remove_room", "done_rooms"]
+        if user_input is not None:
+            action = user_input.get(CONF_ACTION)
+            if action == "add_room":
+                return await self.async_step_add_room()
+            if action == "edit_room":
+                return await self.async_step_edit_room()
+            if action == "remove_room":
+                return await self.async_step_remove_room()
+            if action == "done_rooms":
+                return await self.async_step_done_rooms()
+            if action == "back":
+                return await self.async_step_init()
 
-        return self.async_show_menu(
+        options = [("add_room", "Lägg till ett rum")]
+        if self._rooms:
+            options += [
+                ("edit_room", "Redigera ett rum (lägg till/ta bort sensorer)"),
+                ("remove_room", "Ta bort ett rum"),
+                ("done_rooms", "✓ Spara rumändringar"),
+            ]
+        options.append(("back", "← Tillbaka till huvudmenyn"))
+
+        schema = vol.Schema(
+            {vol.Required(CONF_ACTION, default="add_room"): _action_selector(options)}
+        )
+
+        return self.async_show_form(
             step_id="rooms",
-            menu_options=menu_options,
+            data_schema=schema,
             description_placeholders={
                 "rooms_summary": _rooms_summary(self._rooms, self.hass)
             },
@@ -465,7 +620,6 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
         errors = {}
         room_name = self._editing_room
         all_sensors = _get_motion_sensors(self.hass)
-        # Available = all sensors NOT assigned to OTHER rooms
         assigned_to_others = {
             s
             for r, sensors in self._rooms.items()
@@ -619,3 +773,38 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="notifications", data_schema=schema, errors=errors
         )
+
+    # ------------------------------------------------------------------
+    # Departure detection section
+    # ------------------------------------------------------------------
+
+    async def async_step_departure(self, user_input=None):
+        """Configure departure detection: phone tracker + exit door sensors."""
+        merged = self._merged()
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title="", data=self._save_options(user_input)
+            )
+
+        exit_sensors = _get_exit_sensors(self.hass)
+        trackers = _get_device_trackers(self.hass)
+        current_exits = merged.get(CONF_EXIT_SENSORS, [])
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_DEVICE_TRACKER,
+                    default=merged.get(CONF_DEVICE_TRACKER, ""),
+                ): vol.In(trackers),
+                vol.Optional(
+                    CONF_EXIT_SENSORS, default=current_exits
+                ): cv.multi_select(_sensor_labels(self.hass, exit_sensors)),
+                vol.Optional(
+                    CONF_DEPARTURE_DELAY,
+                    default=merged.get(CONF_DEPARTURE_DELAY, DEFAULT_DEPARTURE_DELAY),
+                ): vol.All(int, vol.Range(min=1, max=15)),
+            }
+        )
+
+        return self.async_show_form(step_id="departure", data_schema=schema)

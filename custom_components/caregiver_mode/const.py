@@ -39,6 +39,12 @@ AI_PROVIDER_ANTHROPIC = "anthropic"
 AI_PROVIDER_OPENAI = "openai"
 AI_PROVIDERS = [AI_PROVIDER_GROQ, AI_PROVIDER_ANTHROPIC, AI_PROVIDER_OPENAI]
 
+# Departure detection
+CONF_DEVICE_TRACKER = "device_tracker"
+CONF_EXIT_SENSORS = "exit_sensors"
+CONF_DEPARTURE_DELAY = "departure_delay"
+DEFAULT_DEPARTURE_DELAY = 5  # minutes to wait after door closes before checking
+
 # Status values
 STATUS_ACTIVE = "active"
 STATUS_INACTIVE = "inactive"

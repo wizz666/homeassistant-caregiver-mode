@@ -9,6 +9,7 @@ from typing import Callable
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, Event, callback
 from homeassistant.helpers.event import (
+    async_call_later,
     async_track_state_change_event,
     async_track_time_interval,
 )
@@ -31,7 +32,11 @@ from .const import (
     CONF_TELEGRAM_CHAT_IDS,
     CONF_NTFY_TOPIC,
     CONF_NTFY_SERVER,
+    CONF_DEVICE_TRACKER,
+    CONF_EXIT_SENSORS,
+    CONF_DEPARTURE_DELAY,
     DEFAULT_NTFY_SERVER,
+    DEFAULT_DEPARTURE_DELAY,
     CHECK_INTERVAL,
     STATUS_ACTIVE,
     STATUS_INACTIVE,
@@ -111,7 +116,12 @@ class CaregiverCoordinator:
         self.ai_provider: str = data.get(CONF_AI_PROVIDER, AI_PROVIDER_GROQ)
         self.ai_api_key: str = data.get(CONF_AI_API_KEY, "")
 
-        # State
+        # Departure detection config
+        self.device_tracker: str = data.get(CONF_DEVICE_TRACKER, "")
+        self.exit_sensors: list[str] = data.get(CONF_EXIT_SENSORS, [])
+        self.departure_delay_minutes: int = data.get(CONF_DEPARTURE_DELAY, DEFAULT_DEPARTURE_DELAY)
+
+        # Inactivity alert state
         self.last_motion_time: datetime | None = None
         self.last_motion_room: str | None = None
         self.alert_active: bool = False
@@ -120,8 +130,16 @@ class CaregiverCoordinator:
         self.alert_ai_message: str | None = None
         self._last_alert_sent: datetime | None = None
 
+        # Departure detection state
+        self._door_was_opened: bool = False
+        self._door_close_time: datetime | None = None
+        self._departure_check_cancel: Callable | None = None
+        self.departure_alert_active: bool = False
+
         # Subscriptions
-        self._unsub_state: Callable | None = None
+        self._unsub_motion: Callable | None = None
+        self._unsub_exit: Callable | None = None
+        self._unsub_tracker: Callable | None = None
         self._unsub_timer: Callable | None = None
 
     # -----------------------------------------------------------------
@@ -130,13 +148,32 @@ class CaregiverCoordinator:
 
     async def async_setup(self) -> None:
         """Subscribe to sensor state changes and start periodic check."""
+        # Motion sensors
         sensor_ids = list(self.sensor_room_map.keys())
         if sensor_ids:
-            self._unsub_state = async_track_state_change_event(
+            self._unsub_motion = async_track_state_change_event(
                 self.hass, sensor_ids, self._on_motion_event
             )
             _LOGGER.debug(
-                "Caregiver [%s]: tracking %d sensors", self.person_name, len(sensor_ids)
+                "Caregiver [%s]: tracking %d motion sensors", self.person_name, len(sensor_ids)
+            )
+
+        # Exit door sensors
+        if self.exit_sensors:
+            self._unsub_exit = async_track_state_change_event(
+                self.hass, self.exit_sensors, self._on_exit_sensor_event
+            )
+            _LOGGER.debug(
+                "Caregiver [%s]: tracking %d exit sensors", self.person_name, len(self.exit_sensors)
+            )
+
+        # Device tracker (phone)
+        if self.device_tracker:
+            self._unsub_tracker = async_track_state_change_event(
+                self.hass, [self.device_tracker], self._on_tracker_event
+            )
+            _LOGGER.debug(
+                "Caregiver [%s]: tracking device_tracker %s", self.person_name, self.device_tracker
             )
 
         self._unsub_timer = async_track_time_interval(
@@ -147,10 +184,16 @@ class CaregiverCoordinator:
 
     async def async_teardown(self) -> None:
         """Remove subscriptions."""
-        if self._unsub_state:
-            self._unsub_state()
-        if self._unsub_timer:
-            self._unsub_timer()
+        for unsub in [
+            self._unsub_motion,
+            self._unsub_exit,
+            self._unsub_tracker,
+            self._unsub_timer,
+        ]:
+            if unsub:
+                unsub()
+        if self._departure_check_cancel:
+            self._departure_check_cancel()
 
     # -----------------------------------------------------------------
     # Callbacks for entities
@@ -160,7 +203,6 @@ class CaregiverCoordinator:
         self._callbacks.append(cb)
 
     def unregister_callback(self, cb: Callable) -> None:
-        self._callbacks.discard(cb) if hasattr(self._callbacks, "discard") else None
         try:
             self._callbacks.remove(cb)
         except ValueError:
@@ -202,7 +244,7 @@ class CaregiverCoordinator:
         if new_state is None:
             return
         if new_state.state not in ("on", "detected"):
-            return  # Only react to active motion
+            return
 
         entity_id = event.data.get("entity_id", "")
         room = self.sensor_room_map.get(entity_id, entity_id)
@@ -212,10 +254,9 @@ class CaregiverCoordinator:
         self.last_motion_time = datetime.now().astimezone()
         self.last_motion_room = room
 
-        # If alert was active, clear it
         if self.alert_active:
             _LOGGER.info(
-                "Caregiver [%s]: motion detected — clearing alert", self.person_name
+                "Caregiver [%s]: motion detected — clearing inactivity alert", self.person_name
             )
             self.alert_active = False
             self.alert_since = None
@@ -225,21 +266,203 @@ class CaregiverCoordinator:
         self._notify_entities()
 
     # -----------------------------------------------------------------
-    # Periodic check
+    # Exit sensor handler (departure detection — door open/close)
+    # -----------------------------------------------------------------
+
+    @callback
+    def _on_exit_sensor_event(self, event: Event) -> None:
+        """Handle exit door sensor state change."""
+        new_state = event.data.get("new_state")
+        if new_state is None:
+            return
+
+        state_val = new_state.state
+
+        if state_val in ("on", "open"):
+            # Door opened
+            self._door_was_opened = True
+            _LOGGER.debug("Caregiver [%s]: exit door opened", self.person_name)
+
+        elif state_val in ("off", "closed") and self._door_was_opened:
+            # Door closed after having been opened
+            self._door_was_opened = False
+            self._door_close_time = datetime.now().astimezone()
+            _LOGGER.debug(
+                "Caregiver [%s]: exit door closed — scheduling departure check in %d min",
+                self.person_name, self.departure_delay_minutes,
+            )
+
+            # Cancel any pending check
+            if self._departure_check_cancel:
+                self._departure_check_cancel()
+                self._departure_check_cancel = None
+
+            # Schedule departure check after delay
+            self._departure_check_cancel = async_call_later(
+                self.hass,
+                self.departure_delay_minutes * 60,
+                self._check_departure,
+            )
+
+    # -----------------------------------------------------------------
+    # Device tracker handler (phone leaves / returns home)
+    # -----------------------------------------------------------------
+
+    @callback
+    def _on_tracker_event(self, event: Event) -> None:
+        """Handle device tracker (phone) state change."""
+        new_state = event.data.get("new_state")
+        old_state = event.data.get("old_state")
+        if new_state is None or old_state is None:
+            return
+
+        old_val = old_state.state
+        new_val = new_state.state
+
+        AWAY = {"not_home", "away"}
+        HOME = {"home"}
+        IGNORE = {"unavailable", "unknown"}
+
+        # Phone just left home → Scenario A
+        if old_val in HOME and new_val in AWAY:
+            _LOGGER.info("Caregiver [%s]: device tracker left home", self.person_name)
+            if self._within_active_hours():
+                self.hass.async_create_task(
+                    self._send_departure_notification("tracker_left")
+                )
+
+        # Phone returned home → clear departure alert
+        elif old_val in AWAY and new_val in HOME:
+            _LOGGER.info("Caregiver [%s]: device tracker returned home", self.person_name)
+            if self.departure_alert_active:
+                self.departure_alert_active = False
+                self._notify_entities()
+                self.hass.async_create_task(
+                    self._send_departure_notification("returned_home")
+                )
+
+    # -----------------------------------------------------------------
+    # Departure check (called after door close delay)
+    # -----------------------------------------------------------------
+
+    async def _check_departure(self, _now=None) -> None:
+        """Check if person has left based on door event + motion + tracker."""
+        self._departure_check_cancel = None
+
+        if self._door_close_time is None:
+            return
+
+        # Was there motion AFTER the door closed?
+        motion_since_door = (
+            self.last_motion_time is not None
+            and self.last_motion_time > self._door_close_time
+        )
+
+        if motion_since_door:
+            _LOGGER.debug(
+                "Caregiver [%s]: motion detected after door close — person still home",
+                self.person_name,
+            )
+            return
+
+        # No motion since door closed — correlate with device tracker
+        if self.device_tracker:
+            tracker_state = self.hass.states.get(self.device_tracker)
+            if tracker_state:
+                if tracker_state.state == "home":
+                    # Scenario C: door + no motion + phone still home → forgot phone
+                    _LOGGER.warning(
+                        "Caregiver [%s]: likely left but tracker still home (forgot phone?)",
+                        self.person_name,
+                    )
+                    await self._send_departure_notification("forgot_phone")
+                else:
+                    # Scenario A+B confirmed: door + no motion + tracker away
+                    _LOGGER.warning(
+                        "Caregiver [%s]: departed (door + no motion + tracker away)",
+                        self.person_name,
+                    )
+                    await self._send_departure_notification("left_confirmed")
+                return
+
+        # Scenario B: no tracker, just door + no motion
+        _LOGGER.warning(
+            "Caregiver [%s]: possibly departed (door closed, no motion since)",
+            self.person_name,
+        )
+        await self._send_departure_notification("left_likely")
+
+    # -----------------------------------------------------------------
+    # Departure notification
+    # -----------------------------------------------------------------
+
+    async def _send_departure_notification(self, scenario: str) -> None:
+        """Send departure-related notification."""
+        name = self.person_name
+
+        messages: dict[str, tuple[str, str]] = {
+            "tracker_left": (
+                f"📱 {name} har lämnat hemmet",
+                f"{name}s telefon har lämnat hemnätverket.",
+            ),
+            "left_confirmed": (
+                f"🚶 {name} har lämnat hemmet",
+                f"Dörren öppnades och stängdes, ingen rörelse inomhus och telefonen är borta.",
+            ),
+            "left_likely": (
+                f"🚪 {name} kan ha lämnat hemmet",
+                f"Ytterdörren öppnades och stängdes men inga rörelsesensorer registrerade rörelse efteråt.",
+            ),
+            "forgot_phone": (
+                f"⚠️ {name} kan ha lämnat hemmet utan telefonen",
+                f"Dörren öppnades och stängdes, ingen rörelse inomhus — men telefonen är kvar. Har {name} glömt den?",
+            ),
+            "returned_home": (
+                f"🏠 {name} är hemma igen",
+                f"{name}s telefon är tillbaka i hemnätverket.",
+            ),
+        }
+
+        title, message = messages.get(scenario, (f"Caregiver – {name}", scenario))
+
+        if scenario != "returned_home":
+            self.departure_alert_active = True
+        self._notify_entities()
+
+        tasks = []
+        for svc_full in [self.notify_primary, self.notify_secondary]:
+            if svc_full:
+                tasks.append(self._send_ha_notify(svc_full, title, message))
+        if self.telegram_bot_token and self.telegram_chat_ids:
+            for chat_id in self.telegram_chat_ids:
+                tasks.append(self._send_telegram(chat_id, title, message))
+        if self.ntfy_topic:
+            tasks.append(self._send_ntfy(title, message))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    _LOGGER.error(
+                        "Caregiver [%s]: departure notification error: %s",
+                        self.person_name, result,
+                    )
+
+    # -----------------------------------------------------------------
+    # Periodic inactivity check
     # -----------------------------------------------------------------
 
     @callback
     def _periodic_check(self, now=None) -> None:
         """Run every CHECK_INTERVAL seconds."""
         if not self._within_active_hours():
-            # Outside active hours: clear alerts, nothing to do
             if self.alert_active:
                 self.alert_active = False
                 self._notify_entities()
             return
 
         if self.last_motion_time is None:
-            return  # Never seen motion yet
+            return
 
         minutes = self.minutes_since_motion
         if minutes is None:
@@ -249,7 +472,6 @@ class CaregiverCoordinator:
 
         if minutes >= threshold_minutes:
             if not self.alert_active:
-                # Trigger new alert
                 self.alert_active = True
                 self.alert_since = datetime.now().astimezone()
                 self.alert_reason = (
@@ -260,18 +482,15 @@ class CaregiverCoordinator:
                     "Caregiver [%s]: ALERT — %s", self.person_name, self.alert_reason
                 )
                 self._notify_entities()
-                # Send alert async (fire-and-forget from sync callback)
                 self.hass.async_create_task(self._send_alert())
             else:
-                # Alert already active — check cooldown for repeat notification
                 if self._last_alert_sent is not None:
                     elapsed = datetime.now().astimezone() - self._last_alert_sent
-                    cooldown = timedelta(hours=self.alert_cooldown_hours)
-                    if elapsed >= cooldown:
+                    if elapsed >= timedelta(hours=self.alert_cooldown_hours):
                         self.hass.async_create_task(self._send_alert())
 
     # -----------------------------------------------------------------
-    # Alert sending
+    # Inactivity alert sending
     # -----------------------------------------------------------------
 
     async def _send_alert(self) -> None:
@@ -281,42 +500,43 @@ class CaregiverCoordinator:
         self._last_alert_sent = datetime.now().astimezone()
         self._notify_entities()
 
-        title = f"Caregiver – {self.person_name}"
+        title = f"⚠️ Caregiver – {self.person_name}"
         tasks = []
 
-        # HA notify channels
         for svc_full in [self.notify_primary, self.notify_secondary]:
             if svc_full:
                 tasks.append(self._send_ha_notify(svc_full, title, message))
 
-        # Telegram — one task per chat_id
         if self.telegram_bot_token and self.telegram_chat_ids:
             for chat_id in self.telegram_chat_ids:
                 tasks.append(self._send_telegram(chat_id, title, message))
 
-        # Ntfy
         if self.ntfy_topic:
             tasks.append(self._send_ntfy(title, message))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for result in results:
             if isinstance(result, Exception):
-                _LOGGER.error("Caregiver [%s]: notification channel error: %s", self.person_name, result)
+                _LOGGER.error(
+                    "Caregiver [%s]: notification channel error: %s",
+                    self.person_name, result,
+                )
 
     async def _send_ha_notify(self, svc_full: str, title: str, message: str) -> None:
         """Send via a HA notify service."""
         parts = svc_full.split(".", 1)
         if len(parts) != 2:
-            _LOGGER.warning("Caregiver [%s]: invalid notify service: %s", self.person_name, svc_full)
+            _LOGGER.warning(
+                "Caregiver [%s]: invalid notify service: %s", self.person_name, svc_full
+            )
             return
         domain, service = parts
         await self.hass.services.async_call(
-            domain,
-            service,
-            {"title": title, "message": message},
-            blocking=False,
+            domain, service, {"title": title, "message": message}, blocking=False,
         )
-        _LOGGER.info("Caregiver [%s]: notification sent via %s", self.person_name, svc_full)
+        _LOGGER.info(
+            "Caregiver [%s]: notification sent via %s", self.person_name, svc_full
+        )
 
     async def _send_telegram(self, chat_id: str, title: str, message: str) -> None:
         """Send a Telegram message to a single chat_id."""
@@ -333,13 +553,12 @@ class CaregiverCoordinator:
             ) as resp:
                 if resp.status == 200:
                     _LOGGER.info(
-                        "Caregiver [%s]: Telegram notification sent to %s",
-                        self.person_name, chat_id,
+                        "Caregiver [%s]: Telegram sent to %s", self.person_name, chat_id
                     )
                 else:
                     body = await resp.text()
                     _LOGGER.error(
-                        "Caregiver [%s]: Telegram error %d for chat %s: %s",
+                        "Caregiver [%s]: Telegram error %d for %s: %s",
                         self.person_name, resp.status, chat_id, body,
                     )
 
@@ -362,7 +581,7 @@ class CaregiverCoordinator:
             ) as resp:
                 if resp.status in (200, 201):
                     _LOGGER.info(
-                        "Caregiver [%s]: ntfy notification sent to %s/%s",
+                        "Caregiver [%s]: ntfy sent to %s/%s",
                         self.person_name, self.ntfy_server, self.ntfy_topic,
                     )
                 else:
@@ -423,75 +642,42 @@ class CaregiverCoordinator:
         return fallback
 
     async def _call_groq(self, prompt: str, fallback: str) -> str:
-        """Call Groq API for message generation."""
         import aiohttp
         url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.ai_api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": "llama-3.1-8b-instant",
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 150,
-            "temperature": 0.4,
-        }
+        headers = {"Authorization": f"Bearer {self.ai_api_key}", "Content-Type": "application/json"}
+        payload = {"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": prompt}], "max_tokens": 150, "temperature": 0.4}
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     return data["choices"][0]["message"]["content"].strip()
-                else:
-                    body = await resp.text()
-                    _LOGGER.error("Groq API error %d: %s", resp.status, body)
+                _LOGGER.error("Groq API error %d: %s", resp.status, await resp.text())
         return fallback
 
     async def _call_anthropic(self, prompt: str, fallback: str) -> str:
-        """Call Anthropic Claude API for message generation."""
         import aiohttp
         url = "https://api.anthropic.com/v1/messages"
-        headers = {
-            "x-api-key": self.ai_api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": "claude-haiku-4-5-20251001",
-            "max_tokens": 150,
-            "messages": [{"role": "user", "content": prompt}],
-        }
+        headers = {"x-api-key": self.ai_api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}
+        payload = {"model": "claude-haiku-4-5-20251001", "max_tokens": 150, "messages": [{"role": "user", "content": prompt}]}
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     return data["content"][0]["text"].strip()
-                else:
-                    body = await resp.text()
-                    _LOGGER.error("Anthropic API error %d: %s", resp.status, body)
+                _LOGGER.error("Anthropic API error %d: %s", resp.status, await resp.text())
         return fallback
 
     async def _call_openai(self, prompt: str, fallback: str) -> str:
-        """Call OpenAI API for message generation."""
         import aiohttp
         url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.ai_api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": "gpt-4o-mini",
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 150,
-            "temperature": 0.4,
-        }
+        headers = {"Authorization": f"Bearer {self.ai_api_key}", "Content-Type": "application/json"}
+        payload = {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "max_tokens": 150, "temperature": 0.4}
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     return data["choices"][0]["message"]["content"].strip()
-                else:
-                    body = await resp.text()
-                    _LOGGER.error("OpenAI API error %d: %s", resp.status, body)
+                _LOGGER.error("OpenAI API error %d: %s", resp.status, await resp.text())
         return fallback
 
     # -----------------------------------------------------------------
@@ -505,12 +691,11 @@ class CaregiverCoordinator:
             start_h, start_m = map(int, self.active_start.split(":"))
             end_h, end_m = map(int, self.active_end.split(":"))
         except ValueError:
-            return True  # If parsing fails, assume always active
+            return True
 
         start = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
         end = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
 
         if start <= end:
             return start <= now <= end
-        # Overnight range (e.g. 22:00–06:00)
         return now >= start or now <= end
