@@ -61,7 +61,15 @@
   "options": {
     "step": {
       "init": {
-        "title": "Caregiver Mode – Basic Settings",
+        "title": "Caregiver Mode – Configure",
+        "menu_options": {
+          "timing": "Timing & alert thresholds",
+          "rooms": "Manage rooms",
+          "notifications": "Notification channels"
+        }
+      },
+      "timing": {
+        "title": "Caregiver Mode – Timing",
         "description": "Update monitoring time window and alert thresholds.",
         "data": {
           "active_start": "Active hours start (HH:MM)",
@@ -75,8 +83,9 @@
         "description": "Configured rooms:\n{rooms_summary}",
         "menu_options": {
           "add_room": "Add a room",
+          "edit_room": "Edit a room (add/remove sensors)",
           "remove_room": "Remove a room",
-          "done_rooms": "Done – continue to notifications"
+          "done_rooms": "Save room changes"
         }
       },
       "add_room": {
@@ -84,6 +93,20 @@
         "description": "Give the room a name and select the motion sensors located in it.",
         "data": {
           "room_name": "Room name (e.g. Bedroom, Kitchen)",
+          "motion_sensors": "Motion sensors in this room"
+        }
+      },
+      "edit_room": {
+        "title": "Edit Room – Select Room",
+        "description": "Choose which room to edit.",
+        "data": {
+          "room_name": "Room to edit"
+        }
+      },
+      "edit_room_sensors": {
+        "title": "Edit Room – {room_name}",
+        "description": "Select the motion sensors for {room_name}. Sensors from other rooms are not shown.",
+        "data": {
           "motion_sensors": "Motion sensors in this room"
         }
       },

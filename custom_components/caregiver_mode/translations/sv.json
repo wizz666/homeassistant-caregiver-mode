@@ -61,7 +61,15 @@
   "options": {
     "step": {
       "init": {
-        "title": "Caregiver Mode – Grundinställningar",
+        "title": "Caregiver Mode – Konfigurera",
+        "menu_options": {
+          "timing": "Tidsinställningar & larmnivåer",
+          "rooms": "Hantera rum",
+          "notifications": "Notifikationskanaler"
+        }
+      },
+      "timing": {
+        "title": "Caregiver Mode – Tidsinställningar",
         "description": "Uppdatera tidsfönster och larmnivåer.",
         "data": {
           "active_start": "Aktiva timmar start (HH:MM)",
@@ -75,8 +83,9 @@
         "description": "Konfigurerade rum:\n{rooms_summary}",
         "menu_options": {
           "add_room": "Lägg till ett rum",
+          "edit_room": "Redigera ett rum (lägg till/ta bort sensorer)",
           "remove_room": "Ta bort ett rum",
-          "done_rooms": "Klar – fortsätt till notifikationer"
+          "done_rooms": "Spara rumändringar"
         }
       },
       "add_room": {
@@ -84,6 +93,20 @@
         "description": "Ge rummet ett namn och välj vilka rörelsesensorer som finns i det.",
         "data": {
           "room_name": "Rumsnamn (t.ex. Sovrum, Kök)",
+          "motion_sensors": "Rörelsesensorer i detta rum"
+        }
+      },
+      "edit_room": {
+        "title": "Redigera rum – Välj rum",
+        "description": "Välj vilket rum du vill redigera.",
+        "data": {
+          "room_name": "Rum att redigera"
+        }
+      },
+      "edit_room_sensors": {
+        "title": "Redigera rum – {room_name}",
+        "description": "Välj rörelsesensorer för {room_name}. Sensorer tilldelade andra rum visas inte.",
+        "data": {
           "motion_sensors": "Rörelsesensorer i detta rum"
         }
       },

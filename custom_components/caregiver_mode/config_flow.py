@@ -51,6 +51,16 @@ def _get_motion_sensors(hass: HomeAssistant) -> list[str]:
     return result
 
 
+def _sensor_labels(hass: HomeAssistant, entity_ids: list[str]) -> dict[str, str]:
+    """Return {entity_id: friendly_name} for use in multi_select."""
+    result = {}
+    for eid in entity_ids:
+        state = hass.states.get(eid)
+        label = state.attributes.get("friendly_name", eid) if state else eid
+        result[eid] = label
+    return result
+
+
 def _get_notify_services(hass: HomeAssistant) -> list[str]:
     """Return all available notify services."""
     services = hass.services.async_services().get("notify", {})
@@ -89,9 +99,7 @@ def _rooms_summary(rooms: dict[str, list[str]], hass: HomeAssistant) -> str:
         labels = []
         for s in sensors:
             state = hass.states.get(s)
-            label = (
-                state.attributes.get("friendly_name", s) if state else s
-            )
+            label = state.attributes.get("friendly_name", s) if state else s
             labels.append(label)
         lines.append(f"• {room_name}: {', '.join(labels)}")
     return "\n".join(lines)
@@ -197,7 +205,7 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_ROOM_NAME): str,
                 vol.Required(CONF_MOTION_SENSORS): cv.multi_select(
-                    {s: s for s in available}
+                    _sensor_labels(self.hass, available)
                 ),
             }
         )
@@ -294,19 +302,50 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry) -> None:
         self._config_entry = config_entry
-        self._data: dict = {}
         self._rooms: dict[str, list[str]] = {}
+        self._rooms_initialized: bool = False
+        self._editing_room: str = ""
 
     def _merged(self) -> dict:
         """Return merged config: options override data."""
         return {**self._config_entry.data, **self._config_entry.options}
 
+    def _save_options(self, overrides: dict) -> dict:
+        """Build new options: full merged config (minus person_name) + overrides."""
+        new_options = dict(self._merged())
+        new_options.pop(CONF_PERSON_NAME, None)
+        new_options.update(overrides)
+        return new_options
+
+    def _load_rooms(self) -> None:
+        """Load rooms from existing config (called once per flow session)."""
+        if self._rooms_initialized:
+            return
+        merged = self._merged()
+        current_room_map: dict = merged.get(CONF_ROOM_NAMES, {})
+        current_sensors: list = merged.get(
+            CONF_MOTION_SENSORS, list(current_room_map.keys())
+        )
+        self._rooms = _data_to_rooms(current_room_map, current_sensors)
+        self._rooms_initialized = True
+
     # ------------------------------------------------------------------
-    # Step 1: Basic settings
+    # Top-level menu
     # ------------------------------------------------------------------
 
     async def async_step_init(self, user_input=None):
-        """Step 1: Timing and alert thresholds (person_name is locked)."""
+        """Top-level menu: choose what to configure."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["timing", "rooms", "notifications"],
+        )
+
+    # ------------------------------------------------------------------
+    # Timing section
+    # ------------------------------------------------------------------
+
+    async def async_step_timing(self, user_input=None):
+        """Adjust timing and alert thresholds."""
         merged = self._merged()
         errors = {}
 
@@ -317,14 +356,9 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                 errors[CONF_ACTIVE_END] = "invalid_time"
 
             if not errors:
-                self._data.update(user_input)
-                # Pre-populate rooms from existing config
-                current_room_map: dict = merged.get(CONF_ROOM_NAMES, {})
-                current_sensors: list = merged.get(
-                    CONF_MOTION_SENSORS, list(current_room_map.keys())
+                return self.async_create_entry(
+                    title="", data=self._save_options(user_input)
                 )
-                self._rooms = _data_to_rooms(current_room_map, current_sensors)
-                return await self.async_step_rooms()
 
         schema = vol.Schema(
             {
@@ -347,18 +381,21 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
             }
         )
 
-        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="timing", data_schema=schema, errors=errors
+        )
 
     # ------------------------------------------------------------------
-    # Step 2: Room management (menu + sub-steps)
+    # Rooms section
     # ------------------------------------------------------------------
 
     async def async_step_rooms(self, user_input=None):
         """Room management menu."""
+        self._load_rooms()
+
         menu_options = ["add_room"]
         if self._rooms:
-            menu_options.append("remove_room")
-            menu_options.append("done_rooms")
+            menu_options += ["edit_room", "remove_room", "done_rooms"]
 
         return self.async_show_menu(
             step_id="rooms",
@@ -394,13 +431,71 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
             {
                 vol.Required(CONF_ROOM_NAME): str,
                 vol.Required(CONF_MOTION_SENSORS): cv.multi_select(
-                    {s: s for s in available}
+                    _sensor_labels(self.hass, available)
                 ),
             }
         )
 
         return self.async_show_form(
             step_id="add_room", data_schema=schema, errors=errors
+        )
+
+    async def async_step_edit_room(self, user_input=None):
+        """Choose which room to edit."""
+        errors = {}
+
+        if user_input is not None:
+            self._editing_room = user_input.get(CONF_ROOM_NAME, "")
+            return await self.async_step_edit_room_sensors()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_ROOM_NAME): vol.In(
+                    {r: r for r in self._rooms.keys()}
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="edit_room", data_schema=schema, errors=errors
+        )
+
+    async def async_step_edit_room_sensors(self, user_input=None):
+        """Edit the sensors assigned to the selected room."""
+        errors = {}
+        room_name = self._editing_room
+        all_sensors = _get_motion_sensors(self.hass)
+        # Available = all sensors NOT assigned to OTHER rooms
+        assigned_to_others = {
+            s
+            for r, sensors in self._rooms.items()
+            if r != room_name
+            for s in sensors
+        }
+        available = [s for s in all_sensors if s not in assigned_to_others]
+        current = self._rooms.get(room_name, [])
+
+        if user_input is not None:
+            selected = user_input.get(CONF_MOTION_SENSORS, [])
+            if not selected:
+                errors[CONF_MOTION_SENSORS] = "no_sensors"
+            else:
+                self._rooms[room_name] = selected
+                return await self.async_step_rooms()
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_MOTION_SENSORS, default=current
+                ): cv.multi_select(_sensor_labels(self.hass, available)),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="edit_room_sensors",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"room_name": room_name},
         )
 
     async def async_step_remove_room(self, user_input=None):
@@ -426,14 +521,20 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_done_rooms(self, user_input=None):
-        """Finalize rooms and proceed to notifications."""
+        """Save rooms and exit options flow."""
         all_sensors, sensor_room_map = _rooms_to_data(self._rooms)
-        self._data[CONF_MOTION_SENSORS] = all_sensors
-        self._data[CONF_ROOM_NAMES] = sensor_room_map
-        return await self.async_step_notifications()
+        return self.async_create_entry(
+            title="",
+            data=self._save_options(
+                {
+                    CONF_MOTION_SENSORS: all_sensors,
+                    CONF_ROOM_NAMES: sensor_room_map,
+                }
+            ),
+        )
 
     # ------------------------------------------------------------------
-    # Step 3: Notifications
+    # Notifications section
     # ------------------------------------------------------------------
 
     async def async_step_notifications(self, user_input=None):
@@ -469,8 +570,9 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                     errors["base"] = "no_channel_configured"
 
             if not errors:
-                self._data.update(user_input)
-                return self.async_create_entry(title="", data=self._data)
+                return self.async_create_entry(
+                    title="", data=self._save_options(user_input)
+                )
 
         current_primary = merged.get(
             CONF_NOTIFY_PRIMARY,
