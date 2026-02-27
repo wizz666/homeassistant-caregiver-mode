@@ -26,8 +26,13 @@ CONF_NTFY_TOPIC = "ntfy_topic"
 CONF_NTFY_SERVER = "ntfy_server"
 DEFAULT_NTFY_SERVER = "https://ntfy.sh"
 
+# Language
+CONF_LANGUAGE = "language"
+DEFAULT_LANGUAGE = "auto"
+LANGUAGES = ["auto", "en", "sv"]
+
 # Defaults
-DEFAULT_PERSON_NAME = "Farmor"
+DEFAULT_PERSON_NAME = "Grandma"
 DEFAULT_ACTIVE_START = "07:00"
 DEFAULT_ACTIVE_END = "22:00"
 DEFAULT_ALERT_DELAY = 4
@@ -88,3 +93,107 @@ SUFFIX_LAST_SEEN = "last_seen"
 SUFFIX_LAST_ROOM = "last_room"
 SUFFIX_ALERT = "alert"
 SUFFIX_FALL = "fall_detected"
+
+# Weekday names per language
+WEEKDAYS: dict[str, list[str]] = {
+    "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    "sv": ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"],
+}
+
+# Notification message templates per language
+# Use str.format() with named keys: {name}, {room}, {time}, {now}, {weekday},
+# {hours}, {mins}, {minutes}, {start}, {end}
+MESSAGES: dict[str, dict] = {
+    "en": {
+        "inactivity_fallback": (
+            "{name} was last seen in {room} at {time}. "
+            "It is now {now} ({weekday}) — {hours}h {mins}min without motion."
+        ),
+        "ai_prompt": (
+            "Person: {name}\n"
+            "Active hours: {start}–{end}\n"
+            "Last motion: {time} in {room}\n"
+            "Current time: {now}\n"
+            "Day: {weekday}\n"
+            "Time since last motion: {hours}h {mins}min\n\n"
+            "Write a short, calm message in English informing the family about the situation. "
+            "Max 2 sentences. Mention the specific time and room. Avoid alarmism. "
+            "Only provide the message text, nothing else."
+        ),
+        "fall_title": "🚨 FALL DETECTED – {name}",
+        "fall_message": (
+            "{name} may have fallen. The camera analysis showed a person lying on the floor. "
+            "Please check immediately! ({time})"
+        ),
+        "inactivity_reason": "No motion for {minutes} min (threshold: {hours}h)",
+        "inactivity_title": "⚠️ Caregiver – {name}",
+        "departure": {
+            "tracker_left": (
+                "📱 {name} has left home",
+                "{name}'s phone has left the home network.",
+            ),
+            "left_confirmed": (
+                "🚶 {name} has left home",
+                "The door was opened and closed, no indoor motion and the phone is gone.",
+            ),
+            "left_likely": (
+                "🚪 {name} may have left home",
+                "The front door was opened and closed but no motion sensors registered activity afterwards.",
+            ),
+            "forgot_phone": (
+                "⚠️ {name} may have left without their phone",
+                "The door opened and closed, no indoor motion — but the phone is still home. Did {name} forget it?",
+            ),
+            "returned_home": (
+                "🏠 {name} is back home",
+                "{name}'s phone is back on the home network.",
+            ),
+        },
+    },
+    "sv": {
+        "inactivity_fallback": (
+            "{name} registrerades senast i {room} kl {time}. "
+            "Det är nu {now} ({weekday}) — {hours}h {mins}min utan rörelse."
+        ),
+        "ai_prompt": (
+            "Person: {name}\n"
+            "Normala aktiva timmar: {start}–{end}\n"
+            "Senaste registrerade rörelse: {time} i {room}\n"
+            "Nuvarande tid: {now}\n"
+            "Dag: {weekday}\n"
+            "Tid sedan senaste rörelse: {hours}h {mins}min\n\n"
+            "Skriv ett kort, lugnt SMS på svenska som informerar familjen om situationen. "
+            "Max 2 meningar. Nämn specifik tid och rum. Undvik alarmism. "
+            "Ge bara meddelandetexten, inget annat."
+        ),
+        "fall_title": "🚨 FALL DETEKTERAT – {name}",
+        "fall_message": (
+            "{name} kan ha fallit. Kameraanalysen visade en person liggande på golvet. "
+            "Kontrollera omedelbart! (kl {time})"
+        ),
+        "inactivity_reason": "Ingen rörelse på {minutes} minuter (gräns {hours} timmar)",
+        "inactivity_title": "⚠️ Caregiver – {name}",
+        "departure": {
+            "tracker_left": (
+                "📱 {name} har lämnat hemmet",
+                "{name}s telefon har lämnat hemnätverket.",
+            ),
+            "left_confirmed": (
+                "🚶 {name} har lämnat hemmet",
+                "Dörren öppnades och stängdes, ingen rörelse inomhus och telefonen är borta.",
+            ),
+            "left_likely": (
+                "🚪 {name} kan ha lämnat hemmet",
+                "Ytterdörren öppnades och stängdes men inga rörelsesensorer registrerade rörelse efteråt.",
+            ),
+            "forgot_phone": (
+                "⚠️ {name} kan ha lämnat hemmet utan telefonen",
+                "Dörren öppnades och stängdes, ingen rörelse inomhus — men telefonen är kvar. Har {name} glömt den?",
+            ),
+            "returned_home": (
+                "🏠 {name} är hemma igen",
+                "{name}s telefon är tillbaka i hemnätverket.",
+            ),
+        },
+    },
+}

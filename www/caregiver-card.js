@@ -4,6 +4,25 @@
  * https://github.com/wizz666/homeassistant-caregiver-mode
  */
 
+const LABELS = {
+  en: {
+    last_seen:     'Last seen',
+    last_room:     'Last room',
+    fall_banner:   '🚨 Fall detected — contact immediately',
+    alert_banner:  '⚠ Alert active — contact now',
+    action_btn:    '✓ Action taken — Dismiss alert',
+    snapshot_label:'📷 Camera image at detection',
+  },
+  sv: {
+    last_seen:     'Senast sedd',
+    last_room:     'Senaste rum',
+    fall_banner:   '🚨 Fall detekterat — kontakta omedelbart',
+    alert_banner:  '⚠ Larm aktivt — kontakta nu',
+    action_btn:    '✓ Åtgärd vidtagen — Stäng larm',
+    snapshot_label:'📷 Kamerabild vid detektering',
+  },
+};
+
 const STATUS_COLORS = {
   active:   { bg: '#E8F5E9', border: '#4CAF50', badge: '#4CAF50', text: '#fff' },
   inactive: { bg: '#FFF8E1', border: '#FF9800', badge: '#FF9800', text: '#fff' },
@@ -80,6 +99,7 @@ class CaregiverCard extends HTMLElement {
     const s = hass?.states ?? {};
     const g = (id) => (s[id] ? s[id].state : '');
     const fallEnt = s[this._entities.fall];
+    const haLang = (hass?.locale?.language ?? 'en').split('-')[0];
     return [
       g(this._entities.status),
       g(this._entities.last_seen),
@@ -88,6 +108,7 @@ class CaregiverCard extends HTMLElement {
       g(this._entities.fall),
       fallEnt?.attributes?.snapshot_url ?? '',
       fallEnt?.attributes?.fall_since ?? '',
+      this._config.language ?? haLang,
     ].join('|');
   }
 
@@ -120,6 +141,12 @@ class CaregiverCard extends HTMLElement {
     const fallSince   = fallEnt?.attributes?.fall_since ?? '';
     const hasEntryId  = !!this._config.entry_id;
     const personName  = this._config.name || this._config.entity_prefix;
+
+    // Language: card config → HA locale → fallback en
+    const cfgLang   = this._config.language;
+    const haLang    = (this._hass?.locale?.language ?? 'en').split('-')[0].toLowerCase();
+    const lang      = LABELS[cfgLang] ? cfgLang : (LABELS[haLang] ? haLang : 'en');
+    const L         = LABELS[lang];
 
     const color  = STATUS_COLORS[status] ?? STATUS_COLORS.unknown;
     const label  = STATUS_LABELS[status] ?? status;
@@ -270,8 +297,8 @@ class CaregiverCard extends HTMLElement {
       </style>
 
       <div class="card">
-        <div class="banner banner-fall">🚨 Fall detekterat — kontakta omedelbart</div>
-        <div class="banner banner-alert">⚠ Larm aktivt — kontakta nu</div>
+        <div class="banner banner-fall">${L.fall_banner}</div>
+        <div class="banner banner-alert">${L.alert_banner}</div>
         <div class="header">
           <div class="person">
             <div class="person-icon">
@@ -283,20 +310,20 @@ class CaregiverCard extends HTMLElement {
         </div>
         ${fallActive && snapshotUrl ? `
         <div class="snapshot-wrap">
-          <div class="snapshot-label">📷 Kamerabild vid detektering</div>
+          <div class="snapshot-label">${L.snapshot_label}</div>
           <img src="${snapshotUrl}?t=${encodeURIComponent(fallSince)}" alt="Fall snapshot" />
         </div>` : ''}
         <div class="body">
           <div class="row">
-            <span class="row-label">Senast sedd</span>
+            <span class="row-label">${L.last_seen}</span>
             <span class="row-value">${relTs}</span>
           </div>
           <div class="row">
-            <span class="row-label">Senaste rum</span>
+            <span class="row-label">${L.last_room}</span>
             <span class="row-value">${room}</span>
           </div>
         </div>
-        <button class="action-btn" id="clear-fall-btn">✓ Åtgärd vidtagen — Stäng larm</button>
+        <button class="action-btn" id="clear-fall-btn">${L.action_btn}</button>
       </div>
     `;
     this._bindEvents();

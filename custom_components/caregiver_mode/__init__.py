@@ -43,8 +43,10 @@ from .const import (
     CONF_OLLAMA_MODEL,
     CONF_FALL_CONFIRM_COUNT,
     CONF_GROQ_VISION_MODEL,
+    CONF_LANGUAGE,
     DEFAULT_NTFY_SERVER,
     DEFAULT_DEPARTURE_DELAY,
+    DEFAULT_LANGUAGE,
     DEFAULT_OLLAMA_URL,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_GROQ_VISION_MODEL,
@@ -62,15 +64,13 @@ from .const import (
     VISION_PROVIDER_OLLAMA,
     VISION_PROVIDER_ANTHROPIC,
     VISION_PROVIDER_OPENAI,
+    WEEKDAYS,
+    MESSAGES,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "binary_sensor"]
-
-WEEKDAYS_SV = [
-    "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"
-]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -196,6 +196,9 @@ class CaregiverCoordinator:
         self._door_close_time: datetime | None = None
         self._departure_check_cancel: Callable | None = None
         self.departure_alert_active: bool = False
+
+        # Language
+        self.language: str = data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE)
 
         # Camera / fall detection config
         self.camera_entity: str = data.get(CONF_CAMERA_ENTITY, "")
@@ -503,31 +506,13 @@ class CaregiverCoordinator:
     async def _send_departure_notification(self, scenario: str) -> None:
         """Send departure-related notification."""
         name = self.person_name
+        dep = MESSAGES.get(self._get_lang(), MESSAGES["en"]).get("departure", {})
 
-        messages: dict[str, tuple[str, str]] = {
-            "tracker_left": (
-                f"📱 {name} har lämnat hemmet",
-                f"{name}s telefon har lämnat hemnätverket.",
-            ),
-            "left_confirmed": (
-                f"🚶 {name} har lämnat hemmet",
-                f"Dörren öppnades och stängdes, ingen rörelse inomhus och telefonen är borta.",
-            ),
-            "left_likely": (
-                f"🚪 {name} kan ha lämnat hemmet",
-                f"Ytterdörren öppnades och stängdes men inga rörelsesensorer registrerade rörelse efteråt.",
-            ),
-            "forgot_phone": (
-                f"⚠️ {name} kan ha lämnat hemmet utan telefonen",
-                f"Dörren öppnades och stängdes, ingen rörelse inomhus — men telefonen är kvar. Har {name} glömt den?",
-            ),
-            "returned_home": (
-                f"🏠 {name} är hemma igen",
-                f"{name}s telefon är tillbaka i hemnätverket.",
-            ),
-        }
+        def _dep(key: str) -> tuple[str, str]:
+            tmpl = dep.get(key, (f"Caregiver – {name}", key))
+            return tmpl[0].format(name=name), tmpl[1].format(name=name)
 
-        title, message = messages.get(scenario, (f"Caregiver – {name}", scenario))
+        title, message = _dep(scenario) if scenario in dep else (f"Caregiver – {name}", scenario)
 
         if scenario != "returned_home":
             self.departure_alert_active = True
@@ -781,11 +766,8 @@ class CaregiverCoordinator:
         """Send fall detection notification via all configured channels, with camera image."""
         name = self.person_name
         now_str = datetime.now().astimezone().strftime("%H:%M")
-        title = f"🚨 FALL DETEKTERAT – {name}"
-        message = (
-            f"{name} kan ha fallit. Kameraanalysen visade en person liggande på golvet. "
-            f"Kontrollera omedelbart! (kl {now_str})"
-        )
+        title = self._msg("fall_title", name=name)
+        message = self._msg("fall_message", name=name, time=now_str)
 
         # Get fresh snapshot for Telegram (if camera configured)
         image_b64, image_ct = "", ""
@@ -898,9 +880,10 @@ class CaregiverCoordinator:
             if not self.alert_active:
                 self.alert_active = True
                 self.alert_since = datetime.now().astimezone()
-                self.alert_reason = (
-                    f"Ingen rörelse på {minutes} minuter "
-                    f"(gräns {self.alert_delay_hours} timmar)"
+                self.alert_reason = self._msg(
+                    "inactivity_reason",
+                    minutes=minutes,
+                    hours=self.alert_delay_hours,
                 )
                 _LOGGER.warning(
                     "Caregiver [%s]: ALERT — %s", self.person_name, self.alert_reason
@@ -924,7 +907,7 @@ class CaregiverCoordinator:
         self._last_alert_sent = datetime.now().astimezone()
         self._notify_entities()
 
-        title = f"⚠️ Caregiver – {self.person_name}"
+        title = self._msg("inactivity_title", name=self.person_name)
         tasks = []
 
         for svc_full in [self.notify_primary, self.notify_secondary]:
@@ -1026,32 +1009,31 @@ class CaregiverCoordinator:
         hours = minutes // 60
         mins_rem = minutes % 60
 
+        lang = self._get_lang()
+        weekday_list = WEEKDAYS.get(lang, WEEKDAYS["en"])
         last_time_str = (
-            self.last_motion_time.strftime("%H:%M") if self.last_motion_time else "okänt"
+            self.last_motion_time.strftime("%H:%M") if self.last_motion_time else "—"
         )
-        last_room = self.last_motion_room or "okänt rum"
-        weekday = WEEKDAYS_SV[now.weekday()]
+        last_room = self.last_motion_room or "—"
+        weekday = weekday_list[now.weekday()]
 
-        fallback = (
-            f"{self.person_name} registrerades senast i {last_room} kl {last_time_str}. "
-            f"Det är nu {now.strftime('%H:%M')} ({weekday}) — "
-            f"{hours}h {mins_rem}min utan rörelse."
+        tmpl_vars = dict(
+            name=self.person_name,
+            room=last_room,
+            time=last_time_str,
+            now=now.strftime("%H:%M"),
+            weekday=weekday,
+            hours=hours,
+            mins=mins_rem,
+            start=self.active_start,
+            end=self.active_end,
         )
+        fallback = self._msg("inactivity_fallback", **tmpl_vars)
 
         if not self.ai_enabled or not self.ai_api_key:
             return fallback
 
-        prompt = (
-            f"Person: {self.person_name}\n"
-            f"Normala aktiva timmar: {self.active_start}–{self.active_end}\n"
-            f"Senaste registrerade rörelse: {last_time_str} i {last_room}\n"
-            f"Nuvarande tid: {now.strftime('%H:%M')}\n"
-            f"Dag: {weekday}\n"
-            f"Tid sedan senaste rörelse: {hours}h {mins_rem}min\n\n"
-            "Skriv ett kort, lugnt SMS på svenska som informerar familjen om situationen. "
-            "Max 2 meningar. Nämn specifik tid och rum. Undvik alarmism. "
-            "Ge bara meddelandetexten, inget annat."
-        )
+        prompt = self._msg("ai_prompt", **tmpl_vars)
 
         try:
             if self.ai_provider == AI_PROVIDER_GROQ:
@@ -1107,6 +1089,19 @@ class CaregiverCoordinator:
     # -----------------------------------------------------------------
     # Helpers
     # -----------------------------------------------------------------
+
+    def _get_lang(self) -> str:
+        """Resolve the active language code (en or sv)."""
+        lang = self.language
+        if lang == "auto" or lang not in MESSAGES:
+            ha_lang = getattr(self.hass.config, "language", "en") or "en"
+            lang = ha_lang.split("-")[0].lower()
+        return lang if lang in MESSAGES else "en"
+
+    def _msg(self, key: str, **kwargs) -> str:
+        """Return a formatted message template for the active language."""
+        tmpl = MESSAGES.get(self._get_lang(), MESSAGES["en"]).get(key, "")
+        return tmpl.format(**kwargs) if kwargs else tmpl
 
     def _within_active_hours(self) -> bool:
         """Return True if current time is within configured active hours."""

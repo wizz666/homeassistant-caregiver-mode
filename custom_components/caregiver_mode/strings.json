@@ -9,7 +9,8 @@
           "active_start": "Active hours start (HH:MM)",
           "active_end": "Active hours end (HH:MM)",
           "alert_delay": "Alert after X hours without motion",
-          "alert_cooldown": "Alert cooldown (hours between repeated alerts)"
+          "alert_cooldown": "Alert cooldown (hours between repeated alerts)",
+          "language": "Notification language"
         }
       },
       "rooms": {
@@ -90,7 +91,10 @@
         "menu_options": {
           "timing": "Timing & alert thresholds",
           "rooms": "Manage rooms",
-          "notifications": "Notification channels"
+          "notifications": "Notification channels",
+          "departure": "Departure detection",
+          "camera": "Fall detection (camera & AI)",
+          "language": "Notification language"
         }
       },
       "timing": {
@@ -101,6 +105,13 @@
           "active_end": "Active hours end (HH:MM)",
           "alert_delay": "Alert after X hours without motion",
           "alert_cooldown": "Alert cooldown (hours between repeated alerts)"
+        }
+      },
+      "language": {
+        "title": "Caregiver Mode – Notification Language",
+        "description": "Choose the language for alert and notification messages.",
+        "data": {
+          "language": "Notification language"
         }
       },
       "rooms": {

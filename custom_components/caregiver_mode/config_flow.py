@@ -37,6 +37,7 @@ from .const import (
     CONF_OLLAMA_MODEL,
     CONF_FALL_CONFIRM_COUNT,
     CONF_GROQ_VISION_MODEL,
+    CONF_LANGUAGE,
     DEFAULT_NTFY_SERVER,
     DEFAULT_PERSON_NAME,
     DEFAULT_ACTIVE_START,
@@ -44,10 +45,12 @@ from .const import (
     DEFAULT_ALERT_DELAY,
     DEFAULT_ALERT_COOLDOWN,
     DEFAULT_DEPARTURE_DELAY,
+    DEFAULT_LANGUAGE,
     DEFAULT_OLLAMA_URL,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_GROQ_VISION_MODEL,
     DEFAULT_FALL_CONFIRM_COUNT,
+    LANGUAGES,
     AI_PROVIDERS,
     AI_PROVIDER_GROQ,
     VISION_PROVIDERS,
@@ -253,6 +256,16 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(
                     CONF_ALERT_COOLDOWN, default=DEFAULT_ALERT_COOLDOWN
                 ): vol.All(int, vol.Range(min=1, max=24)),
+                vol.Required(CONF_LANGUAGE, default=DEFAULT_LANGUAGE): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value="auto", label="Auto (follow HA language)"),
+                            selector.SelectOptionDict(value="en", label="English"),
+                            selector.SelectOptionDict(value="sv", label="Svenska"),
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                ),
             }
         )
 
@@ -536,16 +549,19 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_departure()
             if action == "camera":
                 return await self.async_step_camera()
+            if action == "language":
+                return await self.async_step_language()
 
         schema = vol.Schema(
             {
                 vol.Required(CONF_ACTION, default="rooms"): _action_selector(
                     [
-                        ("timing", "Tidsinställningar & larmnivåer"),
-                        ("rooms", "Hantera rum"),
-                        ("notifications", "Notifikationskanaler"),
-                        ("departure", "Hemlämnig-detektion (telefon & dörr)"),
-                        ("camera", "Falldetektering (kamera & AI)"),
+                        ("timing", "Timing & alert thresholds"),
+                        ("rooms", "Manage rooms"),
+                        ("notifications", "Notification channels"),
+                        ("departure", "Departure detection (phone & door)"),
+                        ("camera", "Fall detection (camera & AI)"),
+                        ("language", "Notification language"),
                     ]
                 )
             }
@@ -597,6 +613,39 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="timing", data_schema=schema, errors=errors
         )
+
+    # ------------------------------------------------------------------
+    # Language section
+    # ------------------------------------------------------------------
+
+    async def async_step_language(self, user_input=None):
+        """Choose notification language."""
+        merged = self._merged()
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title="", data=self._save_options(user_input)
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_LANGUAGE,
+                    default=merged.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value="auto", label="Auto (follow HA language)"),
+                            selector.SelectOptionDict(value="en", label="English"),
+                            selector.SelectOptionDict(value="sv", label="Svenska"),
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                ),
+            }
+        )
+
+        return self.async_show_form(step_id="language", data_schema=schema)
 
     # ------------------------------------------------------------------
     # Rooms section — dropdown-based

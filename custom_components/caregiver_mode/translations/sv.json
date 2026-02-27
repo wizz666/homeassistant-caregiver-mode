@@ -9,7 +9,8 @@
           "active_start": "Aktiva timmar start (HH:MM)",
           "active_end": "Aktiva timmar slut (HH:MM)",
           "alert_delay": "Larm efter X timmar utan rörelse",
-          "alert_cooldown": "Larmkylning (timmar mellan upprepade larm)"
+          "alert_cooldown": "Larmkylning (timmar mellan upprepade larm)",
+          "language": "Notismeddelandenas språk"
         }
       },
       "rooms": {
@@ -90,7 +91,10 @@
         "menu_options": {
           "timing": "Tidsinställningar & larmnivåer",
           "rooms": "Hantera rum",
-          "notifications": "Notifikationskanaler"
+          "notifications": "Notifikationskanaler",
+          "departure": "Hemlämnig-detektion",
+          "camera": "Falldetektering (kamera & AI)",
+          "language": "Notifikationsspråk"
         }
       },
       "timing": {
@@ -101,6 +105,13 @@
           "active_end": "Aktiva timmar slut (HH:MM)",
           "alert_delay": "Larm efter X timmar utan rörelse",
           "alert_cooldown": "Larmkylning (timmar mellan upprepade larm)"
+        }
+      },
+      "language": {
+        "title": "Caregiver Mode – Notifikationsspråk",
+        "description": "Välj språk för larm- och notismeddelanden.",
+        "data": {
+          "language": "Notismeddelandenas språk"
         }
       },
       "rooms": {
