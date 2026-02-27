@@ -1,7 +1,7 @@
 """Sensors for Caregiver Mode."""
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -103,22 +103,23 @@ class CaregiverStatusSensor(CaregiverBaseSensor):
 class CaregiverLastSeenSensor(CaregiverBaseSensor):
     """Sensor reporting last seen timestamp."""
 
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_{self._slug}_{SUFFIX_LAST_SEEN}"
 
     @property
     def name(self) -> str:
-        return "Last Seen"
+        return "Senast sedd"
 
     @property
     def icon(self) -> str:
         return "mdi:clock-outline"
 
     @property
-    def native_value(self) -> str | None:
-        t = self._coordinator.last_motion_time
-        return t.isoformat() if t else None
+    def native_value(self):
+        return self._coordinator.last_motion_time
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -138,7 +139,7 @@ class CaregiverLastRoomSensor(CaregiverBaseSensor):
 
     @property
     def name(self) -> str:
-        return "Last Room"
+        return "Senaste rum"
 
     @property
     def icon(self) -> str:

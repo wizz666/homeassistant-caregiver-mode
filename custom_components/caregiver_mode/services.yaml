@@ -1,0 +1,42 @@
+trigger_test_fall:
+  name: Test Fall Alert
+  description: >
+    Triggers a simulated fall alert for the specified person.
+    Use this to verify that notifications are working correctly
+    without needing a camera or physical test.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      description: The entry ID of the Caregiver Mode instance to test.
+      required: true
+      selector:
+        config_entry:
+          integration: caregiver_mode
+
+clear_fall:
+  name: Clear Fall Alert
+  description: >
+    Clears an active fall alert and deletes the saved snapshot image.
+    Use this after you have verified the situation and taken action.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      description: The entry ID of the Caregiver Mode instance.
+      required: true
+      selector:
+        config_entry:
+          integration: caregiver_mode
+
+trigger_test_alert:
+  name: Test Inactivity Alert
+  description: >
+    Triggers a simulated inactivity alert for the specified person.
+    Use this to verify that notifications are working correctly.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      description: The entry ID of the Caregiver Mode instance to test.
+      required: true
+      selector:
+        config_entry:
+          integration: caregiver_mode

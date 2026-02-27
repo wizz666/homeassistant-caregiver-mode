@@ -51,6 +51,18 @@
           "exit_sensors": "Ytterdörrsensorer (entrédörr, bakdörr, m.m.)",
           "departure_delay": "Minuter att vänta efter att dörren stängts (1–15)"
         }
+      },
+      "camera": {
+        "title": "Caregiver Mode – Falldetektering (valfritt)",
+        "description": "Valfritt: använd kamera och AI för att detektera fall. Lämna kamerafältet tomt för att hoppa över.\n\nGroq (gratis) kräver en Groq API-nyckel. Har du redan angett en Groq-nyckel för AI-notiser fungerar samma nyckel här.\n\nOllama-URL och modell används bara om Ollama valts som leverantör.",
+        "data": {
+          "camera_entity": "Kamera-entity",
+          "vision_provider": "Vision AI-leverantör",
+          "vision_api_key": "Vision API-nyckel (krävs ej för Ollama)",
+          "ollama_url": "Ollama server-URL",
+          "ollama_model": "Ollama-modellnamn",
+          "fall_confirm_count": "Antal positiva detekteringar i rad innan larm (1–5)"
+        }
       }
     },
     "error": {
@@ -61,7 +73,8 @@
       "invalid_notify": "Notifikationstjänsten måste börja med 'notify.'",
       "ai_key_required": "API-nyckel krävs när AI-meddelanden är aktiverade.",
       "telegram_chat_id_required": "Minst ett Telegram chat-ID krävs när ett bot-token angetts.",
-      "no_channel_configured": "Minst en notifikationskanal måste konfigureras (HA-app, Telegram eller Ntfy)."
+      "no_channel_configured": "Minst en notifikationskanal måste konfigureras (HA-app, Telegram eller Ntfy).",
+      "vision_key_required": "API-nyckel krävs för vald vision-leverantör (krävs ej för Ollama)."
     },
     "abort": {
       "already_configured": "Den här personen är redan konfigurerad."
@@ -152,6 +165,18 @@
           "exit_sensors": "Ytterdörrsensorer (entrédörr, bakdörr, m.m.)",
           "departure_delay": "Minuter att vänta efter att dörren stängts (1–15)"
         }
+      },
+      "camera": {
+        "title": "Caregiver Mode – Falldetektering",
+        "description": "Detektera fall via kamera och AI. Välj ingen kamera för att inaktivera.\n\nGroq (gratis) kräver en Groq API-nyckel. Samma nyckel som för AI-notiser fungerar.\n\nOllama-URL och modell används bara om Ollama valts.",
+        "data": {
+          "camera_entity": "Kamera-entity",
+          "vision_provider": "Vision AI-leverantör",
+          "vision_api_key": "Vision API-nyckel (krävs ej för Ollama)",
+          "ollama_url": "Ollama server-URL",
+          "ollama_model": "Ollama-modellnamn",
+          "fall_confirm_count": "Positiva detekteringar i rad innan larm (1–5)"
+        }
       }
     },
     "error": {
@@ -162,7 +187,8 @@
       "invalid_notify": "Notifikationstjänsten måste börja med 'notify.'",
       "ai_key_required": "API-nyckel krävs när AI-meddelanden är aktiverade.",
       "telegram_chat_id_required": "Minst ett Telegram chat-ID krävs när ett bot-token angetts.",
-      "no_channel_configured": "Minst en notifikationskanal måste konfigureras (HA-app, Telegram eller Ntfy)."
+      "no_channel_configured": "Minst en notifikationskanal måste konfigureras (HA-app, Telegram eller Ntfy).",
+      "vision_key_required": "API-nyckel krävs för vald vision-leverantör (krävs ej för Ollama)."
     }
   },
   "entity": {
@@ -186,6 +212,9 @@
     "binary_sensor": {
       "caregiver_alert": {
         "name": "Larm aktivt"
+      },
+      "caregiver_fall_detected": {
+        "name": "Fall detekterat"
       }
     }
   }

@@ -1,0 +1,26 @@
+title: Caregiver
+views:
+  - title: Övervakning
+    path: oversikt
+    icon: mdi:account-heart
+    cards:
+      - type: custom:caregiver-card
+        entity_prefix: farsan
+        name: Farsan
+        entry_id: 01KJDPDX1BJ8ZAKTJYQTHE9HYH
+      - type: entities
+        title: Enheter
+        entities:
+          - sensor.caregiver_farsan_status
+          - sensor.caregiver_farsan_last_seen
+          - sensor.caregiver_farsan_last_room
+          - binary_sensor.caregiver_farsan_alert_active
+          - binary_sensor.caregiver_farsan_fall_detected
+      - type: button
+        name: Testa fall-larm
+        icon: mdi:test-tube
+        tap_action:
+          action: perform-action
+          perform_action: caregiver_mode.trigger_test_fall
+          data:
+            config_entry_id: 01KJDPDX1BJ8ZAKTJYQTHE9HYH

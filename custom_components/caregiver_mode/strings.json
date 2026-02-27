@@ -51,6 +51,18 @@
           "exit_sensors": "Exit door sensors (front door, back door, etc.)",
           "departure_delay": "Minutes to wait after door closes before checking (1–15)"
         }
+      },
+      "camera": {
+        "title": "Caregiver Mode – Fall Detection (optional)",
+        "description": "Optional: use a camera and AI to detect falls. Leave camera blank to skip.\n\nGroq (free) requires a Groq API key. If you already entered a Groq key for AI notifications, enter the same key here.\n\nOllama URL and model are only used when Ollama is selected as provider.",
+        "data": {
+          "camera_entity": "Camera entity",
+          "vision_provider": "Vision AI provider",
+          "vision_api_key": "Vision API key (not needed for Ollama)",
+          "ollama_url": "Ollama server URL",
+          "ollama_model": "Ollama model name",
+          "fall_confirm_count": "Consecutive positive detections before alert (1–5)"
+        }
       }
     },
     "error": {
@@ -61,7 +73,8 @@
       "invalid_notify": "Notification service must start with 'notify.'",
       "ai_key_required": "API key is required when AI messages are enabled.",
       "telegram_chat_id_required": "At least one Telegram chat ID is required when a bot token is provided.",
-      "no_channel_configured": "At least one notification channel must be configured (HA app, Telegram, or Ntfy)."
+      "no_channel_configured": "At least one notification channel must be configured (HA app, Telegram, or Ntfy).",
+      "vision_key_required": "API key is required for the selected vision provider (not needed for Ollama)."
     },
     "abort": {
       "already_configured": "This person is already configured."
@@ -152,6 +165,18 @@
           "exit_sensors": "Exit door sensors (front door, back door, etc.)",
           "departure_delay": "Minutes to wait after door closes before checking (1–15)"
         }
+      },
+      "camera": {
+        "title": "Caregiver Mode – Fall Detection",
+        "description": "Detect falls using a camera and AI vision. Select no camera to disable.\n\nGroq (free) requires a Groq API key. If you use Groq for AI notifications, enter the same key.\n\nOllama URL and model are only used when Ollama is selected.",
+        "data": {
+          "camera_entity": "Camera entity",
+          "vision_provider": "Vision AI provider",
+          "vision_api_key": "Vision API key (not needed for Ollama)",
+          "ollama_url": "Ollama server URL",
+          "ollama_model": "Ollama model name",
+          "fall_confirm_count": "Consecutive detections before alert (1–5)"
+        }
       }
     },
     "error": {
@@ -162,7 +187,8 @@
       "invalid_notify": "Notification service must start with 'notify.'",
       "ai_key_required": "API key is required when AI messages are enabled.",
       "telegram_chat_id_required": "At least one Telegram chat ID is required when a bot token is provided.",
-      "no_channel_configured": "At least one notification channel must be configured (HA app, Telegram, or Ntfy)."
+      "no_channel_configured": "At least one notification channel must be configured (HA app, Telegram, or Ntfy).",
+      "vision_key_required": "API key is required for the selected vision provider (not needed for Ollama)."
     }
   },
   "entity": {
@@ -186,6 +212,9 @@
     "binary_sensor": {
       "caregiver_alert": {
         "name": "Alert Active"
+      },
+      "caregiver_fall_detected": {
+        "name": "Fall Detected"
       }
     }
   }

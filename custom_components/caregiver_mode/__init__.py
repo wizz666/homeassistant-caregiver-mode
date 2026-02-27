@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 from datetime import datetime, timedelta
 from typing import Callable
@@ -35,9 +36,21 @@ from .const import (
     CONF_DEVICE_TRACKER,
     CONF_EXIT_SENSORS,
     CONF_DEPARTURE_DELAY,
+    CONF_CAMERA_ENTITY,
+    CONF_VISION_PROVIDER,
+    CONF_VISION_API_KEY,
+    CONF_OLLAMA_URL,
+    CONF_OLLAMA_MODEL,
+    CONF_FALL_CONFIRM_COUNT,
+    CONF_GROQ_VISION_MODEL,
     DEFAULT_NTFY_SERVER,
     DEFAULT_DEPARTURE_DELAY,
+    DEFAULT_OLLAMA_URL,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_GROQ_VISION_MODEL,
+    DEFAULT_FALL_CONFIRM_COUNT,
     CHECK_INTERVAL,
+    FALL_POLL_INTERVAL,
     STATUS_ACTIVE,
     STATUS_INACTIVE,
     STATUS_ALERT,
@@ -45,6 +58,10 @@ from .const import (
     AI_PROVIDER_GROQ,
     AI_PROVIDER_ANTHROPIC,
     AI_PROVIDER_OPENAI,
+    VISION_PROVIDER_GROQ,
+    VISION_PROVIDER_OLLAMA,
+    VISION_PROVIDER_ANTHROPIC,
+    VISION_PROVIDER_OPENAI,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -66,6 +83,50 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    # Register services (only once)
+    if not hass.services.has_service(DOMAIN, "trigger_test_fall"):
+        async def _handle_test_fall(call) -> None:
+            entry_id = call.data.get("config_entry_id")
+            coord = hass.data.get(DOMAIN, {}).get(entry_id)
+            if coord:
+                coord.fall_detected = True
+                coord.fall_since = datetime.now().astimezone()
+                coord._fall_confirmations = coord.fall_confirm_count
+                # Save a real snapshot if camera is configured
+                if coord.camera_entity:
+                    image_b64, _ = await coord._get_camera_snapshot()
+                    if image_b64:
+                        await coord._save_fall_snapshot(image_b64)
+                coord._notify_entities()
+                await coord._send_fall_alert()
+
+        async def _handle_test_alert(call) -> None:
+            entry_id = call.data.get("config_entry_id")
+            coord = hass.data.get(DOMAIN, {}).get(entry_id)
+            if coord:
+                coord.alert_active = True
+                coord.alert_since = datetime.now().astimezone()
+                coord.alert_reason = "Testlarm – manuellt utlöst"
+                coord._notify_entities()
+                await coord._send_alert()
+
+        async def _handle_clear_fall(call) -> None:
+            entry_id = call.data.get("config_entry_id")
+            coord = hass.data.get(DOMAIN, {}).get(entry_id)
+            if coord:
+                coord.fall_detected = False
+                coord.fall_since = None
+                coord._fall_confirmations = 0
+                coord._fall_snapshot_path = ""
+                coord.hass.async_add_executor_job(coord._delete_fall_snapshot)
+                coord._notify_entities()
+                _LOGGER.info("Caregiver [%s]: fall alert cleared via service", coord.person_name)
+
+        hass.services.async_register(DOMAIN, "trigger_test_fall", _handle_test_fall)
+        hass.services.async_register(DOMAIN, "trigger_test_alert", _handle_test_alert)
+        hass.services.async_register(DOMAIN, "clear_fall", _handle_clear_fall)
+
     return True
 
 
@@ -136,11 +197,31 @@ class CaregiverCoordinator:
         self._departure_check_cancel: Callable | None = None
         self.departure_alert_active: bool = False
 
+        # Camera / fall detection config
+        self.camera_entity: str = data.get(CONF_CAMERA_ENTITY, "")
+        self.vision_provider: str = data.get(CONF_VISION_PROVIDER, VISION_PROVIDER_GROQ)
+        self.vision_api_key: str = data.get(CONF_VISION_API_KEY, "")
+        self.ollama_url: str = data.get(CONF_OLLAMA_URL, DEFAULT_OLLAMA_URL)
+        self.ollama_model: str = data.get(CONF_OLLAMA_MODEL, DEFAULT_OLLAMA_MODEL)
+        self.fall_confirm_count: int = data.get(CONF_FALL_CONFIRM_COUNT, DEFAULT_FALL_CONFIRM_COUNT)
+        self.groq_vision_model: str = data.get(CONF_GROQ_VISION_MODEL, DEFAULT_GROQ_VISION_MODEL)
+        # Fallback: reuse AI API key if same provider and no separate vision key given
+        if not self.vision_api_key and data.get(CONF_AI_PROVIDER) == self.vision_provider:
+            self.vision_api_key = data.get(CONF_AI_API_KEY, "")
+
+        # Fall detection state
+        self.fall_detected: bool = False
+        self.fall_since: datetime | None = None
+        self._fall_confirmations: int = 0
+        self._fall_check_active: bool = False
+        self._fall_snapshot_path: str = ""  # /local/caregiver_snapshot_slug.jpg
+
         # Subscriptions
         self._unsub_motion: Callable | None = None
         self._unsub_exit: Callable | None = None
         self._unsub_tracker: Callable | None = None
         self._unsub_timer: Callable | None = None
+        self._unsub_fall_timer: Callable | None = None
 
     # -----------------------------------------------------------------
     # Setup / teardown
@@ -182,6 +263,18 @@ class CaregiverCoordinator:
             timedelta(seconds=CHECK_INTERVAL),
         )
 
+        # Fall detection timer (only if camera configured)
+        if self.camera_entity:
+            self._unsub_fall_timer = async_track_time_interval(
+                self.hass,
+                self._fall_check_tick,
+                timedelta(seconds=FALL_POLL_INTERVAL),
+            )
+            _LOGGER.debug(
+                "Caregiver [%s]: fall detection enabled via %s (provider: %s)",
+                self.person_name, self.camera_entity, self.vision_provider,
+            )
+
     async def async_teardown(self) -> None:
         """Remove subscriptions."""
         for unsub in [
@@ -189,6 +282,7 @@ class CaregiverCoordinator:
             self._unsub_exit,
             self._unsub_tracker,
             self._unsub_timer,
+            self._unsub_fall_timer,
         ]:
             if unsub:
                 unsub()
@@ -262,6 +356,16 @@ class CaregiverCoordinator:
             self.alert_since = None
             self.alert_reason = None
             self.alert_ai_message = None
+
+        if self.fall_detected:
+            _LOGGER.info(
+                "Caregiver [%s]: motion detected — clearing fall alert", self.person_name
+            )
+            self.fall_detected = False
+            self.fall_since = None
+            self._fall_confirmations = 0
+            self._fall_snapshot_path = ""
+            self.hass.async_add_executor_job(self._delete_fall_snapshot)
 
         self._notify_entities()
 
@@ -447,6 +551,326 @@ class CaregiverCoordinator:
                         "Caregiver [%s]: departure notification error: %s",
                         self.person_name, result,
                     )
+
+    # -----------------------------------------------------------------
+    # Fall detection (camera + vision AI)
+    # -----------------------------------------------------------------
+
+    @callback
+    def _fall_check_tick(self, now=None) -> None:
+        """Periodic fall detection tick — skips if conditions not met."""
+        if not self._within_active_hours():
+            return
+        if self.fall_detected:
+            return  # Already alarmed; cleared by motion event
+        if self.departure_alert_active:
+            return  # Person likely not home
+        self.hass.async_create_task(self._do_fall_check())
+
+    async def _do_fall_check(self) -> None:
+        """Take a snapshot and run vision analysis for fall detection."""
+        if self._fall_check_active:
+            return  # Previous check still running
+        self._fall_check_active = True
+        try:
+            image_b64, content_type = await self._get_camera_snapshot()
+            if not image_b64:
+                return
+
+            fell = await self._analyze_for_fall(image_b64, content_type)
+
+            if fell:
+                self._fall_confirmations += 1
+                _LOGGER.warning(
+                    "Caregiver [%s]: fall candidate (confirmation %d/%d)",
+                    self.person_name, self._fall_confirmations, self.fall_confirm_count,
+                )
+                if self._fall_confirmations >= self.fall_confirm_count and not self.fall_detected:
+                    self.fall_detected = True
+                    self.fall_since = datetime.now().astimezone()
+                    await self._save_fall_snapshot(image_b64)
+                    self._notify_entities()
+                    await self._send_fall_alert()
+            else:
+                if not self.fall_detected:
+                    self._fall_confirmations = 0
+        except Exception as exc:
+            _LOGGER.error("Caregiver [%s]: fall check error: %s", self.person_name, exc)
+        finally:
+            self._fall_check_active = False
+
+    async def _get_camera_snapshot(self) -> tuple[str, str]:
+        """Return (base64_image, content_type) from the configured camera."""
+        try:
+            from homeassistant.components.camera import async_get_image
+            image = await async_get_image(self.hass, self.camera_entity, timeout=15)
+            b64 = base64.b64encode(image.content).decode("utf-8")
+            ct = image.content_type or "image/jpeg"
+            return b64, ct
+        except Exception as exc:
+            _LOGGER.error(
+                "Caregiver [%s]: camera snapshot failed (%s): %s",
+                self.person_name, self.camera_entity, exc,
+            )
+            return "", ""
+
+    async def _save_fall_snapshot(self, image_b64: str) -> None:
+        """Save fall snapshot to www folder (single file, always overwritten)."""
+        import os
+        slug = self.person_name.lower().replace(" ", "_")
+        filename = f"caregiver_snapshot_{slug}.jpg"
+        filepath = f"/config/www/{filename}"
+        try:
+            image_bytes = base64.b64decode(image_b64)
+            await self.hass.async_add_executor_job(
+                lambda: open(filepath, "wb").write(image_bytes)
+            )
+            self._fall_snapshot_path = f"/local/{filename}"
+            _LOGGER.debug("Caregiver [%s]: snapshot saved to %s", self.person_name, filepath)
+        except Exception as exc:
+            _LOGGER.error("Caregiver [%s]: failed to save snapshot: %s", self.person_name, exc)
+
+    def _delete_fall_snapshot(self) -> None:
+        """Delete fall snapshot file from www folder."""
+        import os
+        slug = self.person_name.lower().replace(" ", "_")
+        filepath = f"/config/www/caregiver_snapshot_{slug}.jpg"
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                _LOGGER.debug("Caregiver [%s]: snapshot deleted", self.person_name)
+        except Exception as exc:
+            _LOGGER.error("Caregiver [%s]: failed to delete snapshot: %s", self.person_name, exc)
+
+    async def _analyze_for_fall(self, image_b64: str, content_type: str) -> bool:
+        """Call configured vision provider and return True if fall detected."""
+        question = (
+            "Is there a person lying on the floor or in a position that indicates a fall? "
+            "Answer only YES or NO."
+        )
+        try:
+            if self.vision_provider == VISION_PROVIDER_GROQ:
+                answer = await self._vision_groq(image_b64, content_type, question)
+            elif self.vision_provider == VISION_PROVIDER_OLLAMA:
+                answer = await self._vision_ollama(image_b64, question)
+            elif self.vision_provider == VISION_PROVIDER_ANTHROPIC:
+                answer = await self._vision_anthropic(image_b64, content_type, question)
+            elif self.vision_provider == VISION_PROVIDER_OPENAI:
+                answer = await self._vision_openai(image_b64, content_type, question)
+            else:
+                return False
+
+            _LOGGER.debug(
+                "Caregiver [%s]: vision answer: %s", self.person_name, answer[:80]
+            )
+            return "YES" in answer.upper()
+        except Exception as exc:
+            _LOGGER.error("Caregiver [%s]: vision API error: %s", self.person_name, exc)
+            return False
+
+    async def _vision_groq(self, image_b64: str, content_type: str, question: str) -> str:
+        import aiohttp
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.vision_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.groq_vision_model,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:{content_type};base64,{image_b64}"}},
+                    {"type": "text", "text": question},
+                ],
+            }],
+            "max_tokens": 10,
+            "temperature": 0.0,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data["choices"][0]["message"]["content"].strip()
+                _LOGGER.error("Groq vision error %d: %s", resp.status, await resp.text())
+        return ""
+
+    async def _vision_ollama(self, image_b64: str, question: str) -> str:
+        import aiohttp
+        url = f"{self.ollama_url.rstrip('/')}/api/generate"
+        payload = {
+            "model": self.ollama_model,
+            "prompt": question,
+            "images": [image_b64],
+            "stream": False,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, json=payload, timeout=aiohttp.ClientTimeout(total=60)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data.get("response", "").strip()
+                _LOGGER.error("Ollama vision error %d: %s", resp.status, await resp.text())
+        return ""
+
+    async def _vision_anthropic(self, image_b64: str, content_type: str, question: str) -> str:
+        import aiohttp
+        url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "x-api-key": self.vision_api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+        safe_ct = content_type if content_type in (
+            "image/jpeg", "image/png", "image/gif", "image/webp"
+        ) else "image/jpeg"
+        payload = {
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 10,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": safe_ct, "data": image_b64}},
+                    {"type": "text", "text": question},
+                ],
+            }],
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data["content"][0]["text"].strip()
+                _LOGGER.error("Anthropic vision error %d: %s", resp.status, await resp.text())
+        return ""
+
+    async def _vision_openai(self, image_b64: str, content_type: str, question: str) -> str:
+        import aiohttp
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.vision_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:{content_type};base64,{image_b64}"}},
+                    {"type": "text", "text": question},
+                ],
+            }],
+            "max_tokens": 10,
+            "temperature": 0.0,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data["choices"][0]["message"]["content"].strip()
+                _LOGGER.error("OpenAI vision error %d: %s", resp.status, await resp.text())
+        return ""
+
+    async def _send_fall_alert(self) -> None:
+        """Send fall detection notification via all configured channels, with camera image."""
+        name = self.person_name
+        now_str = datetime.now().astimezone().strftime("%H:%M")
+        title = f"🚨 FALL DETEKTERAT – {name}"
+        message = (
+            f"{name} kan ha fallit. Kameraanalysen visade en person liggande på golvet. "
+            f"Kontrollera omedelbart! (kl {now_str})"
+        )
+
+        # Get fresh snapshot for Telegram (if camera configured)
+        image_b64, image_ct = "", ""
+        if self.camera_entity:
+            image_b64, image_ct = await self._get_camera_snapshot()
+
+        tasks = []
+        for svc_full in [self.notify_primary, self.notify_secondary]:
+            if svc_full:
+                tasks.append(
+                    self._send_ha_notify_fall(svc_full, title, message)
+                )
+        if self.telegram_bot_token and self.telegram_chat_ids:
+            for chat_id in self.telegram_chat_ids:
+                if image_b64:
+                    tasks.append(
+                        self._send_telegram_photo(chat_id, title, message, image_b64)
+                    )
+                else:
+                    tasks.append(self._send_telegram(chat_id, title, message))
+        if self.ntfy_topic:
+            tasks.append(self._send_ntfy(title, message))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    _LOGGER.error(
+                        "Caregiver [%s]: fall alert error: %s", self.person_name, result
+                    )
+
+    async def _send_ha_notify_fall(self, svc_full: str, title: str, message: str) -> None:
+        """Send fall alert via HA notify with camera image and tap URL."""
+        parts = svc_full.split(".", 1)
+        if len(parts) != 2:
+            return
+        domain, service = parts
+        payload: dict = {"title": title, "message": message}
+        if self.camera_entity:
+            payload["data"] = {
+                "image": f"/api/camera_proxy/{self.camera_entity}",
+                "url": "/caregiver-dashboard/oversikt",
+            }
+        else:
+            payload["data"] = {"url": "/caregiver-dashboard/oversikt"}
+        await self.hass.services.async_call(
+            domain, service, payload, blocking=False
+        )
+        _LOGGER.info("Caregiver [%s]: fall notify sent via %s", self.person_name, svc_full)
+
+    async def _send_telegram_photo(
+        self, chat_id: str, title: str, message: str, image_b64: str
+    ) -> None:
+        """Send fall alert to Telegram as a photo with caption."""
+        import aiohttp
+        import base64 as _b64
+        url = f"https://api.telegram.org/bot{self.telegram_bot_token}/sendPhoto"
+        image_bytes = _b64.b64decode(image_b64)
+        caption = f"*{title}*\n{message}"
+        form = aiohttp.FormData()
+        form.add_field("chat_id", chat_id)
+        form.add_field("caption", caption)
+        form.add_field("parse_mode", "Markdown")
+        form.add_field(
+            "photo",
+            image_bytes,
+            filename="snapshot.jpg",
+            content_type="image/jpeg",
+        )
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, data=form, timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                if resp.status == 200:
+                    _LOGGER.info(
+                        "Caregiver [%s]: Telegram photo sent to %s",
+                        self.person_name, chat_id,
+                    )
+                else:
+                    body = await resp.text()
+                    _LOGGER.error(
+                        "Caregiver [%s]: Telegram photo error %d: %s — falling back to text",
+                        self.person_name, resp.status, body,
+                    )
+                    await self._send_telegram(chat_id, title, message)
 
     # -----------------------------------------------------------------
     # Periodic inactivity check

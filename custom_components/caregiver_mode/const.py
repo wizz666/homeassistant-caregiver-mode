@@ -54,8 +54,37 @@ STATUS_UNKNOWN = "unknown"
 # Periodic check interval (seconds)
 CHECK_INTERVAL = 300
 
+# Vision / Camera (V2.0)
+CONF_CAMERA_ENTITY = "camera_entity"
+CONF_VISION_PROVIDER = "vision_provider"
+CONF_VISION_API_KEY = "vision_api_key"
+CONF_OLLAMA_URL = "ollama_url"
+CONF_OLLAMA_MODEL = "ollama_model"
+CONF_FALL_CONFIRM_COUNT = "fall_confirm_count"
+
+DEFAULT_OLLAMA_URL = "http://localhost:11434"
+DEFAULT_OLLAMA_MODEL = "moondream"
+DEFAULT_GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+DEFAULT_FALL_CONFIRM_COUNT = 2
+
+CONF_GROQ_VISION_MODEL = "groq_vision_model"
+
+FALL_POLL_INTERVAL = 60  # seconds between fall detection snapshots
+
+VISION_PROVIDER_GROQ = "groq"
+VISION_PROVIDER_OLLAMA = "ollama"
+VISION_PROVIDER_ANTHROPIC = "anthropic"
+VISION_PROVIDER_OPENAI = "openai"
+VISION_PROVIDERS = [
+    VISION_PROVIDER_GROQ,
+    VISION_PROVIDER_OLLAMA,
+    VISION_PROVIDER_ANTHROPIC,
+    VISION_PROVIDER_OPENAI,
+]
+
 # Sensor unique id suffixes
 SUFFIX_STATUS = "status"
 SUFFIX_LAST_SEEN = "last_seen"
 SUFFIX_LAST_ROOM = "last_room"
 SUFFIX_ALERT = "alert"
+SUFFIX_FALL = "fall_detected"

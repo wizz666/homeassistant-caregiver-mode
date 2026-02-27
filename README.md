@@ -1,24 +1,37 @@
 # Caregiver Mode for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
+[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Stöd_projektet-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/wizz666)
 
 AI-assisted motion monitoring for elderly or vulnerable persons living independently. Caregiver Mode watches your motion sensors and sends contextual alerts — via the HA mobile app, Telegram, or Ntfy — if no activity is detected for a configurable number of hours.
 
+**New in V2:** Optional camera-based fall detection powered by vision AI. When a fall is detected, a snapshot is saved, notifications are sent with the image, and the dashboard card shows the photo with a one-tap "Action taken" button.
+
 ## Features
 
 - **Multi-channel notifications** — HA mobile app, Telegram Bot, and/or Ntfy.sh (all optional, any combination, sent in parallel)
-- **AI-generated alert messages** — uses Groq (free), Anthropic Claude, or OpenAI to write calm, context-aware SMS-style messages in Swedish
+- **AI-generated alert messages** — uses Groq (free), Anthropic Claude, or OpenAI to write calm, context-aware messages
+- **Fall detection via camera** *(optional)* — periodic AI vision analysis detects a person lying on the floor; confirms across multiple frames before alerting
+- **Snapshot on fall** — saves a camera image when a fall is confirmed; displayed in the dashboard card and sent via Telegram
 - **Configurable active hours** — only monitors between e.g. 07:00–22:00
 - **Cooldown logic** — prevents notification spam (configurable hours between repeated alerts)
 - **Per-room awareness** — maps sensors to room names for natural language alerts
-- **Auto-clear** — alert clears automatically when motion is detected again
-- **Four entities per monitored person**:
-  - `sensor.*_status` — active / inactive / alert / unknown
-  - `sensor.*_last_seen` — timestamp of last motion
-  - `sensor.*_last_room` — room where motion was last seen
-  - `binary_sensor.*_alert` — on when alert is active (device_class: problem)
+- **Departure detection** *(optional)* — detects when the person leaves home via door sensor + device tracker
+- **Auto-clear** — alerts clear automatically when motion is detected again
+- **Custom Lovelace card** — status card with live image display and "Action taken" button
+
+## Entities
+
+Per monitored person:
+
+| Entity | Description |
+|---|---|
+| `sensor.*_status` | active / inactive / alert / unknown |
+| `sensor.*_last_seen` | timestamp of last motion (formatted) |
+| `sensor.*_last_room` | room where motion was last seen |
+| `binary_sensor.*_alert` | on when inactivity alert is active |
+| `binary_sensor.*_fall_detected` | on when fall is confirmed *(if camera configured)* |
 
 ## Installation
 
@@ -28,18 +41,19 @@ AI-assisted motion monitoring for elderly or vulnerable persons living independe
 2. Add `https://github.com/wizz666/homeassistant-caregiver-mode` as **Integration**
 3. Install **Caregiver Mode**
 4. Restart Home Assistant
+5. Copy `www/caregiver-card.js` to your `/config/www/` folder
+6. Add it as a Lovelace resource: **Settings → Dashboards → Resources → Add** `/local/caregiver-card.js` (type: JavaScript module)
 
 ### Manual
 
-Copy `custom_components/caregiver_mode/` to your HA config directory and restart.
+Copy `custom_components/caregiver_mode/` to your HA config directory, copy `www/caregiver-card.js` to `/config/www/`, and restart.
 
 ## Configuration
 
 Go to **Settings → Integrations → Add Integration → Caregiver Mode**.
 
-The setup has three steps:
-
 ### Step 1 – Basic Settings
+
 | Field | Description | Default |
 |---|---|---|
 | Person name | Name of the monitored person | Farmor |
@@ -48,8 +62,9 @@ The setup has three steps:
 | Alert after X hours | Hours of inactivity before alert | 4 |
 | Alert cooldown | Hours between repeated alerts | 6 |
 
-### Step 2 – Sensors
-Select one or more `binary_sensor` entities with device class `motion` or `occupancy`. Assign room names as a comma-separated list (matching sensor order).
+### Step 2 – Sensors (Rooms)
+
+Add one or more motion sensors and assign them to rooms. Each room gets a name used in alerts and the dashboard card.
 
 ### Step 3 – Notifications
 
@@ -65,7 +80,7 @@ At least one channel must be configured.
 | Field | Description |
 |---|---|
 | Bot token | From [@BotFather](https://t.me/BotFather) |
-| Chat ID(s) | One or more IDs, comma-separated (`123456789, 987654321`) |
+| Chat ID(s) | One or more IDs, comma-separated |
 
 To get your chat ID: start the bot and visit `https://api.telegram.org/bot<TOKEN>/getUpdates`.
 
@@ -75,37 +90,87 @@ To get your chat ID: start the bot and visit `https://api.telegram.org/bot<TOKEN
 | Topic | e.g. `farmor-larm-hemma` |
 | Server URL | `https://ntfy.sh` (or self-hosted) |
 
-Subscribe to your topic in the [Ntfy app](https://ntfy.sh/) (Android/iOS/web).
-
 **AI Messages** (optional)
 | Provider | Model | Notes |
 |---|---|---|
-| Groq | llama-3.1-8b-instant | Free tier available |
-| Anthropic | claude-haiku-4-5 | Fast and cheap |
+| Groq | llama-3.1-8b-instant | Free tier, no credit card required |
+| Anthropic | claude-haiku-4-5 | Fast and inexpensive |
 | OpenAI | gpt-4o-mini | Widely available |
 
-Messages are written in Swedish and fall back to a plain-text template if the AI call fails.
+### Step 4 – Departure Detection *(optional)*
 
-## Example Alert Message
+Detects when the person leaves home by combining door sensor events with a device tracker (phone).
 
+| Field | Description |
+|---|---|
+| Device tracker | `device_tracker.phone` entity |
+| Exit sensors | Door contact sensors |
+| Departure check delay | Minutes to wait after door closes before checking (default: 5) |
+
+### Step 5 – Fall Detection *(optional)*
+
+Uses a camera and a vision AI model to detect falls. A snapshot is taken every 60 seconds during active hours and analyzed. N consecutive positive results (configurable) trigger an alert.
+
+| Field | Description | Default |
+|---|---|---|
+| Camera entity | Any HA camera (e.g. Tapo, Frigate, generic) | — |
+| Vision provider | groq / ollama / anthropic / openai | groq |
+| API key | Leave empty to reuse the AI key from Step 3 if same provider | — |
+| Groq vision model | Model name (update here if Groq changes their lineup) | `meta-llama/llama-4-scout-17b-16e-instruct` |
+| Ollama URL | Only for local Ollama | `http://localhost:11434` |
+| Ollama model | Only for local Ollama | `moondream` |
+| Confirmations required | Frames in a row before alert (1–5) | 2 |
+
+**Groq** is recommended for most users — it has a free tier, no credit card required, and is fast.
+
+## Dashboard Card
+
+Add the custom Lovelace card to any dashboard:
+
+```yaml
+type: custom:caregiver-card
+entity_prefix: farmor        # lowercase person name, spaces → underscore
+name: Farmor                 # display name
+entry_id: <config_entry_id>  # required for the "Action taken" button
+```
+
+To find your `config_entry_id`: **Settings → Integrations → Caregiver Mode → Configure** — the ID is visible in the browser URL as the last path segment.
+
+When a fall is detected the card shows:
+- A pulsing orange banner
+- The camera snapshot taken at detection
+- A green **"✓ Åtgärd vidtagen — Stäng larm"** button that clears the alert and deletes the image
+
+## Services
+
+| Service | Description |
+|---|---|
+| `caregiver_mode.trigger_test_fall` | Simulate a fall alert (for testing notifications) |
+| `caregiver_mode.trigger_test_alert` | Simulate an inactivity alert |
+| `caregiver_mode.clear_fall` | Clear an active fall alert and delete the snapshot |
+
+All services require `config_entry_id` — find it in the integration URL as described above.
+
+## Example Alert Messages
+
+Inactivity alert (no AI):
 > Farmor registrerades senast i Köket kl 08:42. Det är nu 13:15 (onsdag) — 4h 33min utan rörelse.
 
-With AI enabled:
-
+With AI:
 > Farmor har inte rört sig sedan 08:42 i Köket. Det är nu halvtiden på eftermiddagen — kanske värt att ringa och höra hur det är?
 
-## Integration icon (HA 2026.3+)
+Fall detection alert:
+> 🚨 FALL DETEKTERAT – Farmor. Farmor kan ha fallit. Kameraanalysen visade en person liggande på golvet. Kontrollera omedelbart!
 
-Starting with Home Assistant 2026.3, custom integrations can ship their own brand icons directly — no external PR needed.
+## Integration Icon (HA 2026.3+)
 
-Place your icon in:
+Starting with Home Assistant 2026.3, custom integrations can ship their own brand icons. Place your icon in:
+
 ```
 custom_components/caregiver_mode/brand/icon.png
 ```
 
 Optional variants: `dark_icon.png`, `logo.png`, `logo@2x.png`. Recommended size: 256×256 px PNG.
-
-The `brand/` directory is already included in this repo (empty). Drop in your icon and restart HA.
 
 ## Stöd projektet
 

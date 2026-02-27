@@ -1,7 +1,7 @@
 {
   "domain": "caregiver_mode",
   "name": "Caregiver Mode",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "documentation": "https://github.com/wizz666/homeassistant-caregiver-mode",
   "issue_tracker": "https://github.com/wizz666/homeassistant-caregiver-mode/issues",
   "requirements": [],

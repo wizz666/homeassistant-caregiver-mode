@@ -30,6 +30,13 @@ from .const import (
     CONF_DEVICE_TRACKER,
     CONF_EXIT_SENSORS,
     CONF_DEPARTURE_DELAY,
+    CONF_CAMERA_ENTITY,
+    CONF_VISION_PROVIDER,
+    CONF_VISION_API_KEY,
+    CONF_OLLAMA_URL,
+    CONF_OLLAMA_MODEL,
+    CONF_FALL_CONFIRM_COUNT,
+    CONF_GROQ_VISION_MODEL,
     DEFAULT_NTFY_SERVER,
     DEFAULT_PERSON_NAME,
     DEFAULT_ACTIVE_START,
@@ -37,8 +44,17 @@ from .const import (
     DEFAULT_ALERT_DELAY,
     DEFAULT_ALERT_COOLDOWN,
     DEFAULT_DEPARTURE_DELAY,
+    DEFAULT_OLLAMA_URL,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_GROQ_VISION_MODEL,
+    DEFAULT_FALL_CONFIRM_COUNT,
     AI_PROVIDERS,
     AI_PROVIDER_GROQ,
+    VISION_PROVIDERS,
+    VISION_PROVIDER_GROQ,
+    VISION_PROVIDER_OLLAMA,
+    VISION_PROVIDER_ANTHROPIC,
+    VISION_PROVIDER_OPENAI,
 )
 
 TIME_RE = re.compile(r"^\d{2}:\d{2}$")
@@ -145,6 +161,15 @@ def _get_exit_sensors(hass: HomeAssistant) -> list[str]:
         if dc in ("door", "opening", "window"):
             result.append(state.entity_id)
     result.sort()
+    return result
+
+
+def _get_cameras(hass: HomeAssistant) -> dict[str, str]:
+    """Return {entity_id: friendly_name} for all camera entities."""
+    result = {"": "(Ingen kamera – hoppa över falldetektering)"}
+    for state in hass.states.async_all("camera"):
+        name = state.attributes.get("friendly_name", state.entity_id)
+        result[state.entity_id] = name
     return result
 
 
@@ -377,14 +402,7 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Step 4: Optional departure detection (phone + exit door sensors)."""
         if user_input is not None:
             self._data.update(user_input)
-            person_name = self._data[CONF_PERSON_NAME]
-            await self.async_set_unique_id(
-                f"caregiver_{person_name.lower().replace(' ', '_')}"
-            )
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(
-                title=f"Caregiver – {person_name}", data=self._data
-            )
+            return await self.async_step_camera()
 
         exit_sensors = _get_exit_sensors(self.hass)
         trackers = _get_device_trackers(self.hass)
@@ -402,6 +420,65 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         return self.async_show_form(step_id="departure", data_schema=schema)
+
+    async def async_step_camera(self, user_input=None):
+        """Step 5: Optional camera-based fall detection."""
+        errors = {}
+
+        if user_input is not None:
+            camera = user_input.get(CONF_CAMERA_ENTITY, "")
+            provider = user_input.get(CONF_VISION_PROVIDER, VISION_PROVIDER_GROQ)
+            api_key = user_input.get(CONF_VISION_API_KEY, "").strip()
+
+            # Accept empty api_key if existing AI key uses same provider (fallback)
+            existing_ai_key = self._data.get(CONF_AI_API_KEY, "")
+            existing_ai_provider = self._data.get(CONF_AI_PROVIDER, "")
+            has_fallback_key = bool(existing_ai_key and existing_ai_provider == provider)
+
+            if camera and provider != VISION_PROVIDER_OLLAMA and not api_key and not has_fallback_key:
+                errors[CONF_VISION_API_KEY] = "vision_key_required"
+
+            if not errors:
+                self._data.update(user_input)
+                person_name = self._data[CONF_PERSON_NAME]
+                await self.async_set_unique_id(
+                    f"caregiver_{person_name.lower().replace(' ', '_')}"
+                )
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=f"Caregiver – {person_name}", data=self._data
+                )
+
+        cameras = _get_cameras(self.hass)
+
+        schema = vol.Schema(
+            {
+                vol.Optional(CONF_CAMERA_ENTITY, default=""): vol.In(cameras),
+                vol.Optional(
+                    CONF_VISION_PROVIDER, default=VISION_PROVIDER_GROQ
+                ): _action_selector(
+                    [
+                        (VISION_PROVIDER_GROQ, "Groq LLaVA (gratis, rekommenderas)"),
+                        (VISION_PROVIDER_OLLAMA, "Ollama (lokalt, avancerat)"),
+                        (VISION_PROVIDER_ANTHROPIC, "Anthropic Claude (betald)"),
+                        (VISION_PROVIDER_OPENAI, "OpenAI GPT-4V (betald)"),
+                    ]
+                ),
+                vol.Optional(CONF_VISION_API_KEY, default=""): str,
+                vol.Optional(
+                    CONF_GROQ_VISION_MODEL, default=DEFAULT_GROQ_VISION_MODEL
+                ): str,
+                vol.Optional(CONF_OLLAMA_URL, default=DEFAULT_OLLAMA_URL): str,
+                vol.Optional(CONF_OLLAMA_MODEL, default=DEFAULT_OLLAMA_MODEL): str,
+                vol.Optional(
+                    CONF_FALL_CONFIRM_COUNT, default=DEFAULT_FALL_CONFIRM_COUNT
+                ): vol.All(int, vol.Range(min=1, max=5)),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="camera", data_schema=schema, errors=errors
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -457,6 +534,8 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_notifications()
             if action == "departure":
                 return await self.async_step_departure()
+            if action == "camera":
+                return await self.async_step_camera()
 
         schema = vol.Schema(
             {
@@ -466,6 +545,7 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                         ("rooms", "Hantera rum"),
                         ("notifications", "Notifikationskanaler"),
                         ("departure", "Hemlämnig-detektion (telefon & dörr)"),
+                        ("camera", "Falldetektering (kamera & AI)"),
                     ]
                 )
             }
@@ -808,3 +888,72 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
         )
 
         return self.async_show_form(step_id="departure", data_schema=schema)
+
+    async def async_step_camera(self, user_input=None):
+        """Configure camera-based fall detection."""
+        merged = self._merged()
+        errors = {}
+
+        if user_input is not None:
+            camera = user_input.get(CONF_CAMERA_ENTITY, "")
+            provider = user_input.get(CONF_VISION_PROVIDER, VISION_PROVIDER_GROQ)
+            api_key = user_input.get(CONF_VISION_API_KEY, "").strip()
+
+            # Accept empty api_key if existing AI key uses same provider (fallback)
+            existing_ai_key = merged.get(CONF_AI_API_KEY, "")
+            existing_ai_provider = merged.get(CONF_AI_PROVIDER, "")
+            has_fallback_key = bool(existing_ai_key and existing_ai_provider == provider)
+
+            if camera and provider != VISION_PROVIDER_OLLAMA and not api_key and not has_fallback_key:
+                errors[CONF_VISION_API_KEY] = "vision_key_required"
+
+            if not errors:
+                return self.async_create_entry(
+                    title="", data=self._save_options(user_input)
+                )
+
+        cameras = _get_cameras(self.hass)
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_CAMERA_ENTITY,
+                    default=merged.get(CONF_CAMERA_ENTITY, ""),
+                ): vol.In(cameras),
+                vol.Optional(
+                    CONF_VISION_PROVIDER,
+                    default=merged.get(CONF_VISION_PROVIDER, VISION_PROVIDER_GROQ),
+                ): _action_selector(
+                    [
+                        (VISION_PROVIDER_GROQ, "Groq LLaVA (gratis, rekommenderas)"),
+                        (VISION_PROVIDER_OLLAMA, "Ollama (lokalt, avancerat)"),
+                        (VISION_PROVIDER_ANTHROPIC, "Anthropic Claude (betald)"),
+                        (VISION_PROVIDER_OPENAI, "OpenAI GPT-4V (betald)"),
+                    ]
+                ),
+                vol.Optional(
+                    CONF_VISION_API_KEY,
+                    default=merged.get(CONF_VISION_API_KEY, ""),
+                ): str,
+                vol.Optional(
+                    CONF_GROQ_VISION_MODEL,
+                    default=merged.get(CONF_GROQ_VISION_MODEL, DEFAULT_GROQ_VISION_MODEL),
+                ): str,
+                vol.Optional(
+                    CONF_OLLAMA_URL,
+                    default=merged.get(CONF_OLLAMA_URL, DEFAULT_OLLAMA_URL),
+                ): str,
+                vol.Optional(
+                    CONF_OLLAMA_MODEL,
+                    default=merged.get(CONF_OLLAMA_MODEL, DEFAULT_OLLAMA_MODEL),
+                ): str,
+                vol.Optional(
+                    CONF_FALL_CONFIRM_COUNT,
+                    default=merged.get(CONF_FALL_CONFIRM_COUNT, DEFAULT_FALL_CONFIRM_COUNT),
+                ): vol.All(int, vol.Range(min=1, max=5)),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="camera", data_schema=schema, errors=errors
+        )
