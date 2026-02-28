@@ -1,7 +1,7 @@
 # Caregiver Mode för Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
+[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Stöd_projektet-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/wizz666)
 
@@ -70,6 +70,8 @@ Sensorn `anomaly_score` har dessa extra attribut:
 | `confidence` | `none` / `low` / `medium` / `high` |
 | `expected_first_motion` | Förväntad tid för första rörelse idag (HH:MM) |
 | `anomaly_reason` | Läsbar förklaring till aktuell poäng |
+| `weekly_trend` | `stable` / `slightly_declining` / `declining` / `improving` / `insufficient_data` |
+| `trend_reason` | Förklaring av veckotrenden med klartext |
 
 ---
 
@@ -259,6 +261,100 @@ Gå till **Inställningar → Integrationer → Caregiver Mode → Konfigurera �
 | Tröskel för tidig varning | Poängnivå som utlöser notis (50–100) | 75 |
 
 Mönsterdata sparas i `/config/.storage/caregiver_pattern_<namn>.json`.
+
+---
+
+## V4.0-funktioner
+
+### "Jag mår bra"-knapp
+
+Vilken knapp, Zigbee-fjärrkontroll eller binär sensor som helst i Home Assistant kan fungera som välmåendeknapp. När den övervakade personen trycker:
+
+- En bekräftelsenotis skickas till alla konfigurerade kanaler: *"Farmor tryckte på 'Jag mår bra'-knappen kl 08:34. Allt är bra!"*
+- Aktivt inaktivitetslarm rensas automatiskt
+- Händelsen loggas
+
+**Konfigurera:** Inställningar → Integrationer → Caregiver Mode → Konfigurera → **Välmående & eskalering**
+
+Ange entity_id för knappen (t.ex. `button.sovrum_zigbeeknapp`). Fungerar med alla HA-entiteter som byter state vid tryckning: `button.*`, `input_button.*`, Zigbee2MQTT-sensorer eller binary_sensor.
+
+---
+
+### Eskaleringstrappa
+
+Om ett larm skickas men ingen i familjen svarar:
+
+1. Primärt larm skickas omedelbart till alla konfigurerade kanaler
+2. Efter N minuter (standard 15, konfigurerbart 5–60) — om larmet fortfarande är aktivt — skickas ett andra larm till **ytterligare kontakter**
+3. Eskalering avbryts automatiskt om personen rör sig (larmet rensas)
+
+Eskaleringsmeddelandet gör tydligt att det är ett andra försök: *"Larm skickades för 15 min sedan utan respons. Farmor sågs senast i Köket kl 08:42. Detta eskaleringsmeddelande skickas till ytterligare kontakter."*
+
+**Konfigurera:** Inställningar → Integrationer → Caregiver Mode → Konfigurera → **Välmående & eskalering**
+
+| Fält | Beskrivning | Standard |
+|---|---|---|
+| Eskaleringskon­takter | Kommaseparerade notify-tjänster (t.ex. `notify.mobile_app_son,notify.mobile_app_dotter`) | — |
+| Eskaleringsfördröjning | Minuter att vänta innan eskalering (5–60) | 15 |
+
+---
+
+### Veckotrender
+
+Efter 14 dagars data får sensorn `anomaly_score` två nya attribut:
+
+| Attribut | Värden |
+|---|---|
+| `weekly_trend` | `stable` / `slightly_declining` / `declining` / `improving` / `insufficient_data` |
+| `trend_reason` | Klartext, t.ex. *"något färre aktiva timmar/dag (7,2 vs 9,1); vaknar 22 min senare än vanligt (08:12 vs 07:50)"* |
+
+Trenden jämför de **senaste 7 dagarna** mot de **föregående 7–21 dagarna** på två mätvärden:
+- Genomsnittligt antal timmar per dag med minst en rörelsehändelse
+- Genomsnittlig tid för första rörelse
+
+Detta kan upptäcka en gradvis nedgång veckor innan en hälsohändelse, och kan användas i HA-automationer (t.ex. skicka en veckosammanfattning om trenden är `declining`).
+
+---
+
+## Valfri CYD-statusdisplay
+
+Du kan placera en **ESP32-2432S028 ("Cheap Yellow Display")** var som helst i hemmet — på köksbänken, sängbordet eller väggen — och visa en livepanel som familjen ser vid en blick.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Farmor                          ● Aktiv          17:42     │
+├─────────────────────────────────────────────────────────────┤
+│  Senast sedd:  Nyss                                          │
+│  Senaste rum:  Köket                                         │
+│──────────────────────────────────────────────────────────── │
+│  Avvikelse: [████████░░░░░░░░░░░░] 42                       │
+│  Trend:     Stabil                                           │
+│──────────────────────────────────────────────────────────── │
+│                  [ Jag mår bra  ✓ ]                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Displayen hämtar data direkt från Home Assistant via ESPHome — inga extra Python-kodändringar eller HA-konfigurationsändringar krävs. Pekknappen längst ner anropar välmåendeknappen om den är konfigurerad.
+
+**Headerfärg:** grön (aktiv) · grå (inaktiv) · röd (larm eller fall)
+**Avvikelsestapel:** grön (0–49) · orange (50–79) · röd (80–100)
+
+> **3D-printat case:** färdiga höljedesigner för CYD finns på
+> https://makerworld.com/sv/search/models?keyword=cyd%20case
+
+### Vad du behöver
+
+- Ett ESP32-2432S028-kort (~80–120 kr på AliExpress, Amazon, m.m.)
+- En USB-kabel (Micro-USB eller USB-C beroende på kortvariant)
+- ESPHome (tillgängligt som Home Assistant-tillägg)
+
+### Snabbstart
+
+1. Kopiera `caregiver_display.yaml` till din ESPHome-konfigurationsmapp
+2. Redigera tre rader längst upp (person-slug, visningsnamn, välmåendeentitet)
+3. Flasha via USB en gång — alla framtida uppdateringar sker trådlöst (OTA)
+
+Se **[DISPLAY_SETUP.md](DISPLAY_SETUP.md)** för den kompletta steg-för-steg-guiden från tomt kort till fungerande display.
 
 ---
 

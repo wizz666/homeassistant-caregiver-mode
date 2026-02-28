@@ -1,0 +1,308 @@
+# ==============================================================================
+#  Caregiver Mode — CYD Status Display
+#  ESPHome configuration for ESP32-2432S028 ("Cheap Yellow Display")
+#
+#  SETUP — three lines to change:
+#    1. person_slug   → the slug from your HA entities (e.g. "farmor")
+#    2. person_name   → name shown on screen (e.g. "Farmor")
+#    3. wellness_entity → your HA input_button entity (or leave blank to skip)
+#
+#  Then add wifi/OTA/API credentials to your ESPHome secrets.yaml.
+#  Flash once via USB, all future updates happen wirelessly (OTA).
+#
+#  Full setup guide: DISPLAY_SETUP.md
+# ==============================================================================
+
+substitutions:
+  # ── Edit these three lines ────────────────────────────────────────────────
+  person_slug:      farmor                                # e.g. farmor, grandma, dad
+  person_name:      Farmor                                # shown on screen
+  wellness_entity:  input_button.caregiver_farmor_wellness  # HA helper entity (optional)
+  # ─────────────────────────────────────────────────────────────────────────
+
+esphome:
+  name: caregiver-display
+  friendly_name: Caregiver Display
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: WARN   # reduce serial noise; change to DEBUG if troubleshooting
+
+api:
+  encryption:
+    key: !secret caregiver_display_api_key
+
+ota:
+  - platform: esphome
+    password: !secret caregiver_display_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # Fallback AP — connect to this if WiFi fails, then visit 192.168.4.1
+  ap:
+    ssid: "Caregiver Display"
+    password: "setup12345"
+
+captive_portal:
+
+# ── Time (synced from Home Assistant) ────────────────────────────────────────
+time:
+  - platform: homeassistant
+    id: ha_time
+
+# ── SPI bus — shared by both display (ILI9341) and touchscreen (XPT2046) ────
+spi:
+  - id: tft_spi
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+
+# ── Fonts (downloaded from Google Fonts during ESPHome compilation) ───────────
+font:
+  - file: "gfonts://Roboto"
+    id: f_large
+    size: 26
+    glyphs: >-
+      ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
+      ÅÄÖåäö0123456789 !?.:,-/()%+✓⚠
+
+  - file: "gfonts://Roboto"
+    id: f_medium
+    size: 18
+    glyphs: >-
+      ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
+      ÅÄÖåäö0123456789 !?.:,-/()%+✓⚠
+
+  - file: "gfonts://Roboto"
+    id: f_small
+    size: 13
+    glyphs: >-
+      ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
+      ÅÄÖåäö0123456789 !?.:,-/()%+✓⚠
+
+# ── Backlight (PWM dimming) ───────────────────────────────────────────────────
+output:
+  - platform: ledc
+    pin: GPIO21
+    id: backlight_pwm
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    id: backlight
+    name: "Backlight"
+    restore_mode: ALWAYS_ON
+    initial_value: 80%
+
+# ── Sensors pulled from Home Assistant ───────────────────────────────────────
+#    Each sensor refreshes the display immediately on state change.
+
+text_sensor:
+  - platform: homeassistant
+    entity_id: sensor.caregiver_${person_slug}_status
+    id: ha_status
+    on_value: [component.update: tft_display]
+
+  - platform: homeassistant
+    entity_id: sensor.caregiver_${person_slug}_last_room
+    id: ha_last_room
+    on_value: [component.update: tft_display]
+
+  - platform: homeassistant
+    entity_id: sensor.caregiver_${person_slug}_anomaly_score
+    attribute: weekly_trend
+    id: ha_weekly_trend
+    on_value: [component.update: tft_display]
+
+sensor:
+  - platform: homeassistant
+    entity_id: sensor.caregiver_${person_slug}_anomaly_score
+    id: ha_anomaly_score
+    on_value: [component.update: tft_display]
+
+  - platform: homeassistant
+    entity_id: sensor.caregiver_${person_slug}_status
+    attribute: minutes_since_motion
+    id: ha_minutes_since
+    on_value: [component.update: tft_display]
+
+binary_sensor:
+  - platform: homeassistant
+    entity_id: binary_sensor.caregiver_${person_slug}_alert_active
+    id: ha_alert
+    on_state: [component.update: tft_display]
+
+  - platform: homeassistant
+    entity_id: binary_sensor.caregiver_${person_slug}_fall_detected
+    id: ha_fall
+    on_state: [component.update: tft_display]
+
+# ── Touchscreen (XPT2046 resistive) ──────────────────────────────────────────
+#    Touch the "I'm OK" button area at the bottom to send wellness confirmation.
+#    Requires wellness_entity to be set above and created in HA.
+#
+#    If touch is not working: try flipping mirror_x or mirror_y, or
+#    adjust calibration x_min/x_max/y_min/y_max for your specific unit.
+
+touchscreen:
+  - platform: xpt2046
+    id: my_touch
+    spi_id: tft_spi
+    cs_pin: GPIO33
+    interrupt_pin: GPIO36
+    update_interval: 50ms
+    threshold: 400
+    calibration:
+      x_min: 280
+      x_max: 3860
+      y_min: 340
+      y_max: 3860
+    transform:
+      swap_xy: true
+      mirror_y: true
+    on_touch:
+      - if:
+          condition:
+            # "I'm OK" button occupies the bottom strip (y 172–220 in display coords)
+            lambda: 'return touch.y >= 172 && touch.y <= 220;'
+          then:
+            - homeassistant.service:
+                service: input_button.press
+                data:
+                  entity_id: ${wellness_entity}
+
+# ── Display ───────────────────────────────────────────────────────────────────
+display:
+  - platform: ili9xxx
+    model: ILI9341
+    spi_id: tft_spi
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    rotation: 90           # landscape — 320 × 240
+    id: tft_display
+    update_interval: 30s   # fallback refresh; sensors also trigger instant updates
+    lambda: |-
+
+      // ── Read HA states ────────────────────────────────────────────────────────
+      std::string status  = id(ha_status).has_state()      ? id(ha_status).state      : "";
+      std::string room    = id(ha_last_room).has_state()   ? id(ha_last_room).state   : "—";
+      std::string trend   = id(ha_weekly_trend).has_state()? id(ha_weekly_trend).state: "";
+      float score_f       = id(ha_anomaly_score).has_state()? id(ha_anomaly_score).state : NAN;
+      float min_f         = id(ha_minutes_since).has_state()? id(ha_minutes_since).state : NAN;
+      bool  is_alert      = id(ha_alert).has_state() && id(ha_alert).state;
+      bool  is_fall       = id(ha_fall).has_state()  && id(ha_fall).state;
+
+      int score   = std::isnan(score_f) ? -1 : (int)score_f;
+      int minutes = std::isnan(min_f)   ? -1 : (int)min_f;
+
+      // ── Color palette ─────────────────────────────────────────────────────────
+      Color C_BG     (15,  15,  20);
+      Color C_WHITE  (235, 235, 235);
+      Color C_GRAY   (115, 115, 115);
+      Color C_GREEN  ( 30, 155,  60);
+      Color C_RED    (185,  30,  30);
+      Color C_ORANGE (200, 110,   0);
+      Color C_DIMGR  ( 45,  45,  55);
+      Color C_SEPAR  ( 50,  50,  65);
+
+      // ── Background ────────────────────────────────────────────────────────────
+      it.fill(C_BG);
+
+      // ── Header bar (y 0–47) ───────────────────────────────────────────────────
+      Color hdr;
+      if      (is_fall)              hdr = Color(150,   0,   0);
+      else if (is_alert)             hdr = Color(140,  20,   0);
+      else if (status == "active")   hdr = Color(  0,  95,  30);
+      else if (status == "inactive") hdr = Color( 50,  50,  50);
+      else                           hdr = Color( 25,  25,  70);
+      it.filled_rectangle(0, 0, 320, 48, hdr);
+
+      // Person name
+      it.print(12, 10, id(f_large), C_WHITE, "${person_name}");
+
+      // Status dot + label (centre-right of header)
+      Color dot_color;
+      const char* status_label;
+      if      (is_fall)              { dot_color = Color(255,  80,  80); status_label = "FALL";     }
+      else if (is_alert)             { dot_color = Color(255,  80,  80); status_label = "ALERT";    }
+      else if (status == "active")   { dot_color = C_GREEN;              status_label = "Active";   }
+      else if (status == "inactive") { dot_color = C_GRAY;               status_label = "Inactive"; }
+      else                           { dot_color = C_GRAY;               status_label = "—";        }
+      it.filled_circle(210, 24, 7, dot_color);
+      it.print(223, 14, id(f_small), C_WHITE, status_label);
+
+      // Clock (top right)
+      it.strftime(312, 14, id(f_small), C_GRAY, TextAlign::TOP_RIGHT, "%H:%M", id(ha_time).now());
+
+      // ── Last seen (y 56–78) ───────────────────────────────────────────────────
+      it.print(12, 58, id(f_small), C_GRAY, "Last seen:");
+      if (minutes < 0) {
+        it.print(115, 58, id(f_small), C_GRAY, "—");
+      } else if (minutes == 0) {
+        it.print(115, 56, id(f_medium), C_GREEN, "Just now");
+      } else if (minutes < 60) {
+        char buf[32]; snprintf(buf, sizeof(buf), "%d min ago", minutes);
+        it.print(115, 56, id(f_medium), C_WHITE, buf);
+      } else {
+        int h = minutes / 60, m = minutes % 60;
+        char buf[32]; snprintf(buf, sizeof(buf), "%dh %dmin ago", h, m);
+        Color c = is_alert ? C_RED : (minutes > 120 ? C_ORANGE : C_WHITE);
+        it.print(115, 56, id(f_medium), c, buf);
+      }
+
+      // ── Last room (y 82–102) ──────────────────────────────────────────────────
+      it.print(12, 84, id(f_small), C_GRAY, "Last room:");
+      std::string room_display = (room.empty() || room == "unknown") ? "—" : room;
+      it.print(115, 82, id(f_medium), C_WHITE, room_display.c_str());
+
+      // ── Separator ─────────────────────────────────────────────────────────────
+      it.filled_rectangle(10, 112, 300, 1, C_SEPAR);
+
+      // ── Anomaly score bar (y 118–148) ─────────────────────────────────────────
+      it.print(12, 118, id(f_small), C_GRAY, "Anomaly:");
+      if (score < 0) {
+        it.print(95, 118, id(f_small), C_GRAY, "learning...");
+      } else {
+        // Bar: x=95, max width=200
+        it.filled_rectangle(95, 120, 200, 14, C_DIMGR);
+        int bw = (score * 200) / 100;
+        Color bc = score >= 80 ? C_RED : (score >= 50 ? C_ORANGE : C_GREEN);
+        it.filled_rectangle(95, 120, bw, 14, bc);
+        char sbuf[8]; snprintf(sbuf, sizeof(sbuf), "%d", score);
+        it.print(302, 118, id(f_small), C_WHITE, TextAlign::TOP_RIGHT, sbuf);
+      }
+
+      // ── Weekly trend (y 142–158) ──────────────────────────────────────────────
+      it.print(12, 142, id(f_small), C_GRAY, "Trend:");
+      const char* tl;
+      Color tc;
+      if      (trend == "stable")             { tl = "Stable";         tc = C_GREEN;  }
+      else if (trend == "improving" ||
+               trend == "slightly_improving") { tl = "Improving";      tc = C_GREEN;  }
+      else if (trend == "slightly_declining") { tl = "Slight decline"; tc = C_ORANGE; }
+      else if (trend == "declining")          { tl = "Declining";      tc = C_RED;    }
+      else                                    { tl = "Learning...";    tc = C_GRAY;   }
+      it.print(72, 142, id(f_small), tc, tl);
+
+      // ── Separator ─────────────────────────────────────────────────────────────
+      it.filled_rectangle(10, 162, 300, 1, C_SEPAR);
+
+      // ── "I'm OK" touch button (y 170–218) ────────────────────────────────────
+      Color btn_bg  = is_alert ? Color( 0, 110, 35) : Color( 0, 70, 20);
+      Color btn_bdr = is_alert ? Color( 0, 180, 60) : Color( 0, 110, 40);
+      it.filled_rectangle(30, 170, 260, 48, btn_bg);
+      it.rectangle(30, 170, 260, 48, btn_bdr);
+      it.print(160, 180, id(f_medium), C_WHITE, TextAlign::TOP_CENTER, "I'm OK  ✓");
+
+      // ── Fall alert overlay (red border + bright header) ───────────────────────
+      if (is_fall) {
+        it.rectangle( 0,  0, 320, 240, C_RED);
+        it.rectangle( 2,  2, 316, 236, C_RED);
+        it.filled_rectangle(0, 0, 320, 48, Color(165, 0, 0));
+        it.print(160, 10, id(f_large), C_WHITE, TextAlign::TOP_CENTER, "⚠ FALL DETECTED ⚠");
+      }

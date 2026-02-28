@@ -1,7 +1,7 @@
 # Caregiver Mode for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
+[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support_this_project-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/wizz666)
 
@@ -336,6 +336,48 @@ The card shows:
 - Anomaly score bar (green → yellow → orange → red)
 - Fall alert banner with camera snapshot and "Action taken" button
 - Departure alert banner
+
+---
+
+## Optional CYD status display
+
+You can place an **ESP32-2432S028 ("Cheap Yellow Display")** anywhere in the home — kitchen counter, bedside table, family room wall — showing a live dashboard visible at a glance.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Grandma                         ● Active         17:42     │
+├─────────────────────────────────────────────────────────────┤
+│  Last seen:   Just now                                       │
+│  Last room:   Kitchen                                        │
+│──────────────────────────────────────────────────────────── │
+│  Anomaly:  [████████░░░░░░░░░░░░] 42                        │
+│  Trend:    Stable                                            │
+│──────────────────────────────────────────────────────────── │
+│                   [ I'm OK  ✓ ]                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The display reads data directly from Home Assistant via ESPHome — no extra Python code or HA configuration changes required. The touch button at the bottom calls the wellness button entity if configured.
+
+**Header color:** green (active) · grey (inactive) · red (alert or fall)
+**Anomaly bar:** green (0–49) · orange (50–79) · red (80–100)
+
+> **3D printed case:** ready-made enclosures for the CYD are available at
+> https://makerworld.com/sv/search/models?keyword=cyd%20case
+
+### What you need
+
+- An ESP32-2432S028 board (~€8–12 on AliExpress, Amazon, etc.)
+- A USB cable (Micro-USB or USB-C depending on your board variant)
+- ESPHome (available as a Home Assistant add-on)
+
+### Quick setup
+
+1. Copy `caregiver_display.yaml` to your ESPHome configuration folder
+2. Edit three lines at the top (person slug, display name, wellness entity)
+3. Flash via USB once — all future updates are wireless (OTA)
+
+See **[DISPLAY_SETUP.md](DISPLAY_SETUP.md)** for the complete step-by-step guide from a blank board to a live display.
 
 ---
 
