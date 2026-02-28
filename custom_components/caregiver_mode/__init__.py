@@ -45,11 +45,15 @@ from .const import (
     CONF_FALL_CONFIRM_COUNT,
     CONF_GROQ_VISION_MODEL,
     CONF_LANGUAGE,
+    CONF_WELLNESS_BUTTON,
+    CONF_ESCALATION_SERVICES,
+    CONF_ESCALATION_DELAY,
     CONF_PATTERN_ENABLED,
     CONF_ANOMALY_ALERT_ENABLED,
     CONF_ANOMALY_ALERT_THRESHOLD,
     DEFAULT_NTFY_SERVER,
     DEFAULT_DEPARTURE_DELAY,
+    DEFAULT_ESCALATION_DELAY,
     DEFAULT_LANGUAGE,
     DEFAULT_OLLAMA_URL,
     DEFAULT_OLLAMA_MODEL,
@@ -185,6 +189,18 @@ class CaregiverCoordinator:
         self.ai_provider: str = data.get(CONF_AI_PROVIDER, AI_PROVIDER_GROQ)
         self.ai_api_key: str = data.get(CONF_AI_API_KEY, "")
 
+        # Wellness button (V4.0)
+        self.wellness_button: str = data.get(CONF_WELLNESS_BUTTON, "")
+
+        # Escalation chain (V4.0)
+        self.escalation_services: list[str] = [
+            s.strip()
+            for s in data.get(CONF_ESCALATION_SERVICES, "").split(",")
+            if s.strip()
+        ]
+        self.escalation_delay_minutes: int = data.get(CONF_ESCALATION_DELAY, DEFAULT_ESCALATION_DELAY)
+        self._escalation_cancel: "Callable | None" = None
+
         # Departure detection config
         self.device_tracker: str = data.get(CONF_DEVICE_TRACKER, "")
         self.exit_sensors: list[str] = data.get(CONF_EXIT_SENSORS, [])
@@ -242,6 +258,7 @@ class CaregiverCoordinator:
         self._unsub_motion: Callable | None = None
         self._unsub_exit: Callable | None = None
         self._unsub_tracker: Callable | None = None
+        self._unsub_wellness: Callable | None = None
         self._unsub_timer: Callable | None = None
         self._unsub_fall_timer: Callable | None = None
         self._unsub_nightly: Callable | None = None
@@ -264,6 +281,16 @@ class CaregiverCoordinator:
             )
             _LOGGER.debug(
                 "Caregiver [%s]: tracking %d motion sensors", self.person_name, len(sensor_ids)
+            )
+
+        # Wellness / "I'm OK" button
+        if self.wellness_button:
+            self._unsub_wellness = async_track_state_change_event(
+                self.hass, [self.wellness_button], self._on_wellness_event
+            )
+            _LOGGER.debug(
+                "Caregiver [%s]: wellness button tracking %s",
+                self.person_name, self.wellness_button,
             )
 
         # Exit door sensors
@@ -320,6 +347,7 @@ class CaregiverCoordinator:
             self._unsub_motion,
             self._unsub_exit,
             self._unsub_tracker,
+            self._unsub_wellness,
             self._unsub_timer,
             self._unsub_fall_timer,
             self._unsub_nightly,
@@ -328,6 +356,8 @@ class CaregiverCoordinator:
                 unsub()
         if self._departure_check_cancel:
             self._departure_check_cancel()
+        if self._escalation_cancel:
+            self._escalation_cancel()
 
     # -----------------------------------------------------------------
     # Callbacks for entities
@@ -401,6 +431,10 @@ class CaregiverCoordinator:
             self.alert_since = None
             self.alert_reason = None
             self.alert_ai_message = None
+            # Cancel any pending escalation
+            if self._escalation_cancel:
+                self._escalation_cancel()
+                self._escalation_cancel = None
 
         if self.fall_detected:
             _LOGGER.info(
@@ -413,6 +447,75 @@ class CaregiverCoordinator:
             self.hass.async_add_executor_job(self._delete_fall_snapshot)
 
         self._notify_entities()
+
+    # -----------------------------------------------------------------
+    # Wellness button handler ("I'm OK")
+    # -----------------------------------------------------------------
+
+    @callback
+    def _on_wellness_event(self, event: Event) -> None:
+        """Handle state change from the wellness / 'I'm OK' button."""
+        new_state = event.data.get("new_state")
+        old_state = event.data.get("old_state")
+        if new_state is None:
+            return
+
+        # Ignore non-meaningful states (unavailable, unknown, off, empty)
+        IGNORE = {"off", "unavailable", "unknown", ""}
+        if new_state.state.lower() in IGNORE:
+            return
+        # Also ignore if state didn't actually change
+        if old_state and new_state.state == old_state.state:
+            return
+
+        now_ts = datetime.now().astimezone()
+        _LOGGER.info(
+            "Caregiver [%s]: wellness button pressed (state=%s)",
+            self.person_name, new_state.state,
+        )
+
+        # Count as a sign of life
+        self.last_motion_time = now_ts
+
+        # Clear any active inactivity alert
+        if self.alert_active:
+            self.alert_active = False
+            self.alert_since = None
+            self.alert_reason = None
+            self.alert_ai_message = None
+            if self._escalation_cancel:
+                self._escalation_cancel()
+                self._escalation_cancel = None
+
+        self._notify_entities()
+        self.hass.async_create_task(self._send_wellness_notification(now_ts))
+
+    async def _send_wellness_notification(self, ts: datetime) -> None:
+        """Send 'I'm OK' notification via all configured channels."""
+        name = self.person_name
+        time_str = ts.strftime("%H:%M")
+        title = self._msg("wellness_title", name=name)
+        message = self._msg("wellness_message", name=name, time=time_str)
+
+        tasks = []
+        for svc_full in [self.notify_primary, self.notify_secondary]:
+            if svc_full:
+                tasks.append(self._send_ha_notify(svc_full, title, message))
+        if self.telegram_bot_token and self.telegram_chat_ids:
+            for chat_id in self.telegram_chat_ids:
+                tasks.append(self._send_telegram(chat_id, title, message))
+        if self.ntfy_topic:
+            tasks.append(self._send_ntfy(title, message))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    _LOGGER.error(
+                        "Caregiver [%s]: wellness notification error: %s",
+                        self.person_name, result,
+                    )
+        _LOGGER.info("Caregiver [%s]: wellness notification sent", self.person_name)
 
     # -----------------------------------------------------------------
     # Exit sensor handler (departure detection — door open/close)
@@ -1052,6 +1155,60 @@ class CaregiverCoordinator:
                     "Caregiver [%s]: notification channel error: %s",
                     self.person_name, result,
                 )
+
+        # Schedule escalation if configured (only on first alert, not repeats)
+        if self.escalation_services and not self._escalation_cancel:
+            self._escalation_cancel = async_call_later(
+                self.hass,
+                self.escalation_delay_minutes * 60,
+                self._escalation_tick,
+            )
+            _LOGGER.info(
+                "Caregiver [%s]: escalation scheduled in %d min",
+                self.person_name, self.escalation_delay_minutes,
+            )
+
+    @callback
+    def _escalation_tick(self, _now=None) -> None:
+        """Escalation timer fired — send escalation if alert is still active."""
+        self._escalation_cancel = None
+        if self.alert_active:
+            self.hass.async_create_task(self._send_escalation())
+
+    async def _send_escalation(self) -> None:
+        """Send escalation notification to additional contacts."""
+        name = self.person_name
+        room = self.last_motion_room or "—"
+        time_str = self.last_motion_time.strftime("%H:%M") if self.last_motion_time else "—"
+        title = self._msg("escalation_title", name=name)
+        message = self._msg(
+            "escalation_message",
+            name=name,
+            room=room,
+            time=time_str,
+            delay=self.escalation_delay_minutes,
+        )
+
+        tasks = []
+        for svc_full in self.escalation_services:
+            tasks.append(self._send_ha_notify(svc_full, title, message))
+        if self.telegram_bot_token and self.telegram_chat_ids:
+            for chat_id in self.telegram_chat_ids:
+                tasks.append(self._send_telegram(chat_id, title, message))
+        if self.ntfy_topic:
+            tasks.append(self._send_ntfy(title, message))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    _LOGGER.error(
+                        "Caregiver [%s]: escalation error: %s", self.person_name, result
+                    )
+        _LOGGER.warning(
+            "Caregiver [%s]: escalation sent to %d service(s)",
+            self.person_name, len(self.escalation_services),
+        )
 
     async def _send_ha_notify(self, svc_full: str, title: str, message: str) -> None:
         """Send via a HA notify service."""

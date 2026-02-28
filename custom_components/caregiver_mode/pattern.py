@@ -272,6 +272,113 @@ class CaregiverPatternLearner:
         return combined, reason
 
     # ------------------------------------------------------------------
+    # Weekly trend
+    # ------------------------------------------------------------------
+
+    def get_weekly_trend(self) -> tuple[str, str]:
+        """
+        Compare the last 7 days of activity against the previous 7–21 days.
+
+        Returns (trend, explanation) where trend is one of:
+          'stable' | 'slightly_declining' | 'declining' | 'improving' | 'insufficient_data'
+        """
+        if len(self._history) < 14:
+            return (
+                "insufficient_data",
+                f"Need at least 14 days of data ({len(self._history)} so far)",
+            )
+
+        recent = self._history[-7:]
+        baseline = self._history[-21:-7]  # up to 14 days prior to the last 7
+
+        if not baseline:
+            return "insufficient_data", "Not enough baseline data yet"
+
+        def _avg_active_hours(entries: list[dict]) -> float:
+            if not entries:
+                return 0.0
+            return sum(len(e.get("hourly_active", {})) for e in entries) / len(entries)
+
+        def _avg_first_motion(entries: list[dict]) -> float | None:
+            vals = [
+                e["first_motion_minutes"]
+                for e in entries
+                if e.get("first_motion_minutes") is not None
+            ]
+            return sum(vals) / len(vals) if vals else None
+
+        recent_hours = _avg_active_hours(recent)
+        baseline_hours = _avg_active_hours(baseline)
+        recent_fm = _avg_first_motion(recent)
+        baseline_fm = _avg_first_motion(baseline)
+
+        score = 0
+        reasons: list[str] = []
+
+        # -- Active hours comparison --
+        hours_diff = recent_hours - baseline_hours
+        if hours_diff < -1.5:
+            score -= 2
+            reasons.append(
+                f"significantly fewer active hours/day "
+                f"({recent_hours:.1f} vs {baseline_hours:.1f})"
+            )
+        elif hours_diff < -0.7:
+            score -= 1
+            reasons.append(
+                f"somewhat fewer active hours/day "
+                f"({recent_hours:.1f} vs {baseline_hours:.1f})"
+            )
+        elif hours_diff > 1.5:
+            score += 2
+            reasons.append(
+                f"significantly more active hours/day "
+                f"({recent_hours:.1f} vs {baseline_hours:.1f})"
+            )
+        elif hours_diff > 0.7:
+            score += 1
+            reasons.append(
+                f"somewhat more active hours/day "
+                f"({recent_hours:.1f} vs {baseline_hours:.1f})"
+            )
+
+        # -- First motion time comparison --
+        if recent_fm is not None and baseline_fm is not None:
+            fm_diff = recent_fm - baseline_fm  # positive = waking later
+            if fm_diff > 30:
+                score -= 2
+                reasons.append(
+                    f"waking {int(fm_diff)} min later than usual "
+                    f"({_minutes_to_hhmm(recent_fm)} vs {_minutes_to_hhmm(baseline_fm)})"
+                )
+            elif fm_diff > 15:
+                score -= 1
+                reasons.append(
+                    f"waking {int(fm_diff)} min later than usual "
+                    f"({_minutes_to_hhmm(recent_fm)} vs {_minutes_to_hhmm(baseline_fm)})"
+                )
+            elif fm_diff < -30:
+                score += 1
+                reasons.append(
+                    f"waking {abs(int(fm_diff))} min earlier than usual "
+                    f"({_minutes_to_hhmm(recent_fm)} vs {_minutes_to_hhmm(baseline_fm)})"
+                )
+
+        if score <= -3:
+            trend = "declining"
+        elif score <= -1:
+            trend = "slightly_declining"
+        elif score >= 2:
+            trend = "improving"
+        elif score >= 1:
+            trend = "slightly_improving"
+        else:
+            trend = "stable"
+
+        explanation = "; ".join(reasons) if reasons else "within normal range"
+        return trend, explanation
+
+    # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
 

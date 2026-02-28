@@ -187,6 +187,7 @@ class CaregiverAnomalyScoreSensor(CaregiverBaseSensor):
     def extra_state_attributes(self) -> dict:
         c = self._coordinator
         p = c.pattern
+        trend, trend_reason = p.get_weekly_trend()
         return {
             "days_learned": p.days_learned,
             "confidence": p.confidence,
@@ -194,4 +195,6 @@ class CaregiverAnomalyScoreSensor(CaregiverBaseSensor):
             "anomaly_reason": c.anomaly_reason,
             "pattern_enabled": c.pattern_enabled,
             "alert_threshold": c.anomaly_alert_threshold,
+            "weekly_trend": trend,
+            "trend_reason": trend_reason,
         }

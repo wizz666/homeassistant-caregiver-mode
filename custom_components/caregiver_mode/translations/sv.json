@@ -41,16 +41,19 @@
           "ntfy_server": "Ntfy.sh server-URL",
           "ai_enabled": "Aktivera AI-genererade larmmeddelanden",
           "ai_provider": "AI-leverantör",
-          "ai_api_key": "AI API-nyckel"
+          "ai_api_key": "AI API-nyckel",
+          "escalation_services": "Eskaleringsmottagare – notifikationstjänster (kommaseparerade, t.ex. notify.mobile_app_son)",
+          "escalation_delay": "Minuter innan eskalering skickas om ingen svarar (5–60)"
         }
       },
       "departure": {
         "title": "Caregiver Mode – Hemlämnig-detektion",
-        "description": "Valfritt: identifiera när personen lämnar hemmet. Hoppa över om det inte behövs.",
+        "description": "Valfritt: identifiera när personen lämnar hemmet. Hoppa över om det inte behövs.\n\n'Jag mår bra'-knapp: ange entity_id för valfri knapp, Zigbee-fjärrkontroll eller binär sensor som personen kan trycka på för att signalera att allt är bra.",
         "data": {
           "device_tracker": "Telefon / person-tracker (valfri)",
           "exit_sensors": "Ytterdörrsensorer (entrédörr, bakdörr, m.m.)",
-          "departure_delay": "Minuter att vänta efter att dörren stängts (1–15)"
+          "departure_delay": "Minuter att vänta efter att dörren stängts (1–15)",
+          "wellness_button": "'Jag mår bra'-knapps entity_id (valfri, t.ex. button.zigbee_knapp)"
         }
       },
       "camera": {
@@ -197,6 +200,15 @@
           "pattern_learning_enabled": "Aktivera mönsterinlärning",
           "anomaly_alert_enabled": "Aktivera tidiga varningsnotiser",
           "anomaly_alert_threshold": "Tröskel för tidig varning (50–100)"
+        }
+      },
+      "wellness_escalation": {
+        "title": "Caregiver Mode – Wellness & Eskalering",
+        "description": "'Jag mår bra'-knapp: personen kan trycka på denna för att skicka en bekräftelse och rensa aktivt larm. Ange entity_id för valfri knapp, Zigbee-fjärrkontroll eller binary_sensor.\n\nEskaleringstrappa: om ett larm skickas men ingen svarar inom angiven tid skickas ett andra larm till eskaleringsmottagarna.",
+        "data": {
+          "wellness_button": "'Jag mår bra'-knapps entity_id (valfri)",
+          "escalation_services": "Eskaleringsmottagare – notifikationstjänster (kommaseparerade)",
+          "escalation_delay": "Minuter innan eskalering skickas (5–60)"
         }
       }
     },

@@ -33,6 +33,9 @@ The integration runs entirely within your Home Assistant instance. No cloud serv
 | **Inactivity monitoring** | Alert if no motion for a configurable number of hours during active hours |
 | **Pattern learning** *(V3)* | Learns the person's daily rhythm; computes an anomaly score (0–100) in real time |
 | **Early warning** *(V3)* | Optional early alert when anomaly score exceeds a threshold — hours before the normal alert |
+| **Weekly trend** *(V4)* | Detects gradual decline in activity level week over week — before a crisis develops |
+| **"I'm OK" button** *(V4)* | The monitored person can press any Zigbee button to send a wellness confirmation and clear alerts |
+| **Escalation chain** *(V4)* | If nobody responds to an alert within N minutes, a second alert goes to additional contacts |
 | **Multi-channel notifications** | HA mobile app, Telegram Bot, Ntfy.sh — any combination, sent in parallel |
 | **AI-generated messages** | Groq (free), Anthropic Claude, or OpenAI writes calm, context-aware alert text |
 | **Fall detection** *(optional)* | Camera + vision AI detects a person lying on the floor; confirms across multiple frames |
@@ -55,7 +58,7 @@ Per monitored person (replace `<name>` with the slug of the person's name):
 | `sensor.caregiver_<name>_status` | `active` / `inactive` / `alert` / `unknown` |
 | `sensor.caregiver_<name>_last_seen` | Timestamp of last detected motion |
 | `sensor.caregiver_<name>_last_room` | Room where motion was last seen |
-| `sensor.caregiver_<name>_anomaly_score` | 0–100 pattern anomaly score (or `learning` during first 7 days) |
+| `sensor.caregiver_<name>_anomaly_score` | 0–100 pattern anomaly score (or `learning` during first 7 days); also exposes `weekly_trend` attribute |
 | `binary_sensor.caregiver_<name>_alert` | `on` when an inactivity alert is active |
 | `binary_sensor.caregiver_<name>_fall_detected` | `on` when a fall has been confirmed *(if camera configured)* |
 
@@ -67,6 +70,8 @@ The `anomaly_score` sensor has these extra attributes:
 | `confidence` | `none` / `low` / `medium` / `high` |
 | `expected_first_motion` | Predicted first movement time today (HH:MM) |
 | `anomaly_reason` | Human-readable explanation of the current score |
+| `weekly_trend` | `stable` / `slightly_declining` / `declining` / `improving` / `insufficient_data` |
+| `trend_reason` | Plain-language explanation of the weekly trend |
 
 ---
 
@@ -259,6 +264,58 @@ Pattern data is stored in `/config/.storage/caregiver_pattern_<name>.json`.
 
 ---
 
+## V4.0 features
+
+### "I'm OK" button
+
+Any button, Zigbee remote, or binary sensor in Home Assistant can serve as a wellness button. When the monitored person presses it:
+
+- A confirmation notification is sent to all configured channels: *"Grandma pressed the 'I'm OK' button at 08:34. Everything is fine!"*
+- Any active inactivity alert is cleared automatically
+- The event is logged
+
+**Configure:** Settings → Integrations → Caregiver Mode → Configure → **Wellness & escalation**
+
+Enter the entity_id of the button (e.g. `button.bedroom_zigbee_button`). Works with any HA entity that changes state when pressed: `button.*`, `input_button.*`, Zigbee2MQTT sensors, or binary sensors.
+
+---
+
+### Escalation chain
+
+If an alert fires but nobody in the family responds:
+
+1. Primary alert sent immediately to all configured channels
+2. After N minutes (default 15, configurable 5–60) — if the alert is still active — a second escalation notification is sent to **additional contacts**
+3. Escalation is cancelled automatically if the person moves (alert clears)
+
+The escalation message makes clear it is a second attempt: *"Alert was sent 15 min ago with no acknowledgement. Grandma was last seen in the Kitchen at 08:42. This escalation is being sent to additional contacts."*
+
+**Configure:** Settings → Integrations → Caregiver Mode → Configure → **Wellness & escalation**
+
+| Field | Description | Default |
+|---|---|---|
+| Escalation contacts | Comma-separated notify services (e.g. `notify.mobile_app_son,notify.mobile_app_daughter`) | — |
+| Escalation delay | Minutes to wait before escalating (5–60) | 15 |
+
+---
+
+### Weekly activity trend
+
+After 14 days of data the `anomaly_score` sensor gains two new attributes:
+
+| Attribute | Values |
+|---|---|
+| `weekly_trend` | `stable` / `slightly_declining` / `declining` / `improving` / `insufficient_data` |
+| `trend_reason` | Plain-language explanation, e.g. *"somewhat fewer active hours/day (7.2 vs 9.1); waking 22 min later than usual (08:12 vs 07:50)"* |
+
+The trend compares the **last 7 days** against the **previous 7–21 days** on two metrics:
+- Average number of hours per day with at least one motion event
+- Average time of first motion
+
+This can detect gradual decline weeks before a health event, and can be used in HA automations (e.g. send a weekly summary if trend is `declining`).
+
+---
+
 ## Dashboard card
 
 Add the custom Lovelace card to any dashboard:
@@ -288,7 +345,7 @@ All services require `config_entry_id` (see above).
 
 | Service | Description |
 |---|---|
-| `caregiver_mode.trigger_test_alert` | Simulate an inactivity alert |
+| `caregiver_mode.trigger_test_alert` | Simulate an inactivity alert (also triggers escalation timer if configured) |
 | `caregiver_mode.trigger_test_fall` | Simulate a fall alert (captures a real snapshot if camera is configured) |
 | `caregiver_mode.clear_fall` | Clear an active fall alert and delete the snapshot |
 

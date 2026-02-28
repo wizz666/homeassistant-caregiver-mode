@@ -76,6 +76,14 @@ CONF_GROQ_VISION_MODEL = "groq_vision_model"
 
 FALL_POLL_INTERVAL = 60  # seconds between fall detection snapshots
 
+# Wellness button (V4.0)
+CONF_WELLNESS_BUTTON = "wellness_button"
+
+# Escalation chain (V4.0)
+CONF_ESCALATION_SERVICES = "escalation_services"
+CONF_ESCALATION_DELAY = "escalation_delay"
+DEFAULT_ESCALATION_DELAY = 15  # minutes
+
 # Pattern learning (V3.0)
 CONF_PATTERN_ENABLED = "pattern_learning_enabled"
 CONF_ANOMALY_ALERT_ENABLED = "anomaly_alert_enabled"
@@ -145,6 +153,17 @@ MESSAGES: dict[str, dict] = {
             "Expected first movement around {expected}. "
             "Current anomaly score: {score}/100."
         ),
+        "wellness_title": "✅ {name} is OK",
+        "wellness_message": (
+            "{name} pressed the 'I'm OK' button at {time}. "
+            "Everything is fine — no need to worry!"
+        ),
+        "escalation_title": "🔴 ESCALATION – {name} (no response)",
+        "escalation_message": (
+            "An alert was sent {delay} min ago with no acknowledgement. "
+            "{name} was last seen in {room} at {time}. "
+            "This escalation is being sent to additional contacts."
+        ),
         "departure": {
             "tracker_left": (
                 "📱 {name} has left home",
@@ -196,6 +215,17 @@ MESSAGES: dict[str, dict] = {
             "{name} har inte synts till i morse. "
             "Förväntad första rörelse runt {expected}. "
             "Avvikelsespoäng: {score}/100."
+        ),
+        "wellness_title": "✅ {name} mår bra",
+        "wellness_message": (
+            "{name} tryckte på 'Jag mår bra'-knappen kl {time}. "
+            "Allt är väl — ingen anledning till oro!"
+        ),
+        "escalation_title": "🔴 ESKALERING – {name} (ingen bekräftelse)",
+        "escalation_message": (
+            "Larmet skickades för {delay} minuter sedan utan bekräftelse. "
+            "{name} registrerades senast i {room} kl {time}. "
+            "Detta är en eskalering till ytterligare kontakter."
         ),
         "departure": {
             "tracker_left": (

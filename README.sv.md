@@ -33,6 +33,9 @@ Integrationen körs helt inuti din Home Assistant-instans. Ingen molntjänst kr�
 | **Inaktivitetsövervakning** | Larm om ingen rörelse under konfigurerbart antal timmar inom aktiva timmar |
 | **Mönsterinlärning** *(V3)* | Lär sig personens dygnsrytm; beräknar avvikelsespoäng (0–100) i realtid |
 | **Tidig varning** *(V3)* | Valfri tidig notis när avvikelsespoängen överstiger ett tröskelvärde — timmar före normalt larm |
+| **Veckotrender** *(V4)* | Detekterar gradvis nedgång i aktivitetsnivå vecka för vecka — innan en kris uppstår |
+| **"Jag mår bra"-knapp** *(V4)* | Personen kan trycka på valfri Zigbee-knapp för att skicka en välmåendebekräftelse och rensa larm |
+| **Eskaleringstrappa** *(V4)* | Om ingen svarar på larmet inom N minuter skickas ett andra larm till ytterligare kontakter |
 | **Flera notiskanaler** | HA-mobilapp, Telegram Bot, Ntfy.sh — valfri kombination, skickas parallellt |
 | **AI-genererade meddelanden** | Groq (gratis), Anthropic Claude eller OpenAI skriver lugna, kontextmedvetna larmtexter |
 | **Falldetektering** *(valfritt)* | Kamera + vision-AI detekterar en person liggande på golvet; bekräftar över flera bilder |
@@ -55,7 +58,7 @@ Per övervakad person (ersätt `<namn>` med sluggen för personens namn):
 | `sensor.caregiver_<namn>_status` | `active` / `inactive` / `alert` / `unknown` |
 | `sensor.caregiver_<namn>_last_seen` | Tidpunkt för senaste registrerade rörelse |
 | `sensor.caregiver_<namn>_last_room` | Rum där rörelse senast registrerades |
-| `sensor.caregiver_<namn>_anomaly_score` | Avvikelsespoäng 0–100 (eller `learning` under första 7 dagarna) |
+| `sensor.caregiver_<namn>_anomaly_score` | Avvikelsespoäng 0–100 (eller `learning` under första 7 dagarna); exponerar även attributet `weekly_trend` |
 | `binary_sensor.caregiver_<namn>_alert` | `on` när inaktivitetslarm är aktivt |
 | `binary_sensor.caregiver_<namn>_fall_detected` | `on` när fall bekräftats *(om kamera konfigurerad)* |
 

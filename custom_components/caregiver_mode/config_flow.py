@@ -37,6 +37,9 @@ from .const import (
     CONF_OLLAMA_MODEL,
     CONF_FALL_CONFIRM_COUNT,
     CONF_GROQ_VISION_MODEL,
+    CONF_WELLNESS_BUTTON,
+    CONF_ESCALATION_SERVICES,
+    CONF_ESCALATION_DELAY,
     CONF_LANGUAGE,
     CONF_PATTERN_ENABLED,
     CONF_ANOMALY_ALERT_ENABLED,
@@ -48,6 +51,7 @@ from .const import (
     DEFAULT_ALERT_DELAY,
     DEFAULT_ALERT_COOLDOWN,
     DEFAULT_DEPARTURE_DELAY,
+    DEFAULT_ESCALATION_DELAY,
     DEFAULT_LANGUAGE,
     DEFAULT_OLLAMA_URL,
     DEFAULT_OLLAMA_MODEL,
@@ -409,6 +413,10 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     AI_PROVIDERS
                 ),
                 vol.Optional(CONF_AI_API_KEY, default=""): str,
+                vol.Optional(CONF_ESCALATION_SERVICES, default=""): str,
+                vol.Optional(
+                    CONF_ESCALATION_DELAY, default=DEFAULT_ESCALATION_DELAY
+                ): vol.All(int, vol.Range(min=5, max=60)),
             }
         )
 
@@ -418,7 +426,7 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
     async def async_step_departure(self, user_input=None):
-        """Step 4: Optional departure detection (phone + exit door sensors)."""
+        """Step 4: Optional departure detection (phone + exit door sensors) + wellness button."""
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_camera()
@@ -435,6 +443,7 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(
                     CONF_DEPARTURE_DELAY, default=DEFAULT_DEPARTURE_DELAY
                 ): vol.All(int, vol.Range(min=1, max=15)),
+                vol.Optional(CONF_WELLNESS_BUTTON, default=""): str,
             }
         )
 
@@ -559,6 +568,8 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_language()
             if action == "pattern":
                 return await self.async_step_pattern()
+            if action == "wellness_escalation":
+                return await self.async_step_wellness_escalation()
 
         schema = vol.Schema(
             {
@@ -571,6 +582,7 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                         ("camera", "Fall detection (camera & AI)"),
                         ("language", "Notification language"),
                         ("pattern", "Pattern learning (anomaly detection)"),
+                        ("wellness_escalation", "Wellness button & escalation chain"),
                     ]
                 )
             }
@@ -942,6 +954,10 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                     CONF_DEPARTURE_DELAY,
                     default=merged.get(CONF_DEPARTURE_DELAY, DEFAULT_DEPARTURE_DELAY),
                 ): vol.All(int, vol.Range(min=1, max=15)),
+                vol.Optional(
+                    CONF_WELLNESS_BUTTON,
+                    default=merged.get(CONF_WELLNESS_BUTTON, ""),
+                ): str,
             }
         )
 
@@ -1015,6 +1031,38 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="camera", data_schema=schema, errors=errors
         )
+
+    # ------------------------------------------------------------------
+    # Wellness button & escalation chain section
+    # ------------------------------------------------------------------
+
+    async def async_step_wellness_escalation(self, user_input=None):
+        """Configure wellness button and escalation chain."""
+        merged = self._merged()
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title="", data=self._save_options(user_input)
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_WELLNESS_BUTTON,
+                    default=merged.get(CONF_WELLNESS_BUTTON, ""),
+                ): str,
+                vol.Optional(
+                    CONF_ESCALATION_SERVICES,
+                    default=merged.get(CONF_ESCALATION_SERVICES, ""),
+                ): str,
+                vol.Optional(
+                    CONF_ESCALATION_DELAY,
+                    default=merged.get(CONF_ESCALATION_DELAY, DEFAULT_ESCALATION_DELAY),
+                ): vol.All(int, vol.Range(min=5, max=60)),
+            }
+        )
+
+        return self.async_show_form(step_id="wellness_escalation", data_schema=schema)
 
     # ------------------------------------------------------------------
     # Pattern learning section

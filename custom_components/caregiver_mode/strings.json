@@ -41,16 +41,19 @@
           "ntfy_server": "Ntfy.sh server URL",
           "ai_enabled": "Enable AI-generated alert messages",
           "ai_provider": "AI provider",
-          "ai_api_key": "AI API key"
+          "ai_api_key": "AI API key",
+          "escalation_services": "Escalation contacts – notify services (comma-separated, e.g. notify.mobile_app_son)",
+          "escalation_delay": "Minutes before escalation fires if no response (5–60)"
         }
       },
       "departure": {
         "title": "Caregiver Mode – Departure Detection",
-        "description": "Optional: detect when the person leaves home. Skip this step if not needed.",
+        "description": "Optional: detect when the person leaves home. Skip this step if not needed.\n\n'I'm OK' button: enter the entity_id of any button, Zigbee remote, or binary sensor the person can press to signal they are fine.",
         "data": {
           "device_tracker": "Phone / person tracker (optional)",
           "exit_sensors": "Exit door sensors (front door, back door, etc.)",
-          "departure_delay": "Minutes to wait after door closes before checking (1–15)"
+          "departure_delay": "Minutes to wait after door closes before checking (1–15)",
+          "wellness_button": "'I'm OK' button entity_id (optional, e.g. button.zigbee_button)"
         }
       },
       "camera": {
@@ -197,6 +200,15 @@
           "pattern_learning_enabled": "Enable pattern learning",
           "anomaly_alert_enabled": "Enable early warning alerts",
           "anomaly_alert_threshold": "Early warning threshold (50–100)"
+        }
+      },
+      "wellness_escalation": {
+        "title": "Caregiver Mode – Wellness & Escalation",
+        "description": "'I'm OK' button: the monitored person can press this to send a wellness confirmation and clear any active alert. Enter the entity_id of any button, Zigbee remote, or binary_sensor.\n\nEscalation chain: if an alert is sent but nobody responds within the set time, a second alert goes to the escalation contacts.",
+        "data": {
+          "wellness_button": "'I'm OK' button entity_id (optional)",
+          "escalation_services": "Escalation contacts – notify services (comma-separated)",
+          "escalation_delay": "Minutes before escalation fires (5–60)"
         }
       }
     },
