@@ -410,6 +410,24 @@ class CaregiverPatternLearner:
             return _minutes_to_hhmm(fm["mean"])
         return None
 
+    def get_week_stats(self) -> dict:
+        """Return activity statistics for the last 7 completed days in history."""
+        last_7 = self._history[-7:] if self._history else []
+        if not last_7:
+            return {"active_days": 0, "total_days": 0, "avg_first_motion": None}
+        active_days = sum(1 for d in last_7 if d.get("hourly_active"))
+        fm_values = [
+            d["first_motion_minutes"]
+            for d in last_7
+            if d.get("first_motion_minutes") is not None
+        ]
+        avg_fm = sum(fm_values) / len(fm_values) if fm_values else None
+        return {
+            "active_days": active_days,
+            "total_days": len(last_7),
+            "avg_first_motion": avg_fm,  # minutes from midnight, or None
+        }
+
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------

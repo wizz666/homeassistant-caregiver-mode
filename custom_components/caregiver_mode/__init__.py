@@ -45,12 +45,22 @@ from .const import (
     CONF_FALL_CONFIRM_COUNT,
     CONF_GROQ_VISION_MODEL,
     CONF_LANGUAGE,
+    CONF_ACTIVITY_SENSORS,
+    CONF_ACTIVITY_THRESHOLD,
+    CONF_WEEKLY_SUMMARY_ENABLED,
+    CONF_WEEKLY_SUMMARY_DAY,
+    CONF_WEEKLY_SUMMARY_HOUR,
+    CONF_CALLMEBOT_PHONES,
+    CONF_CALLMEBOT_API_KEY,
     CONF_WELLNESS_BUTTON,
     CONF_ESCALATION_SERVICES,
     CONF_ESCALATION_DELAY,
     CONF_PATTERN_ENABLED,
     CONF_ANOMALY_ALERT_ENABLED,
     CONF_ANOMALY_ALERT_THRESHOLD,
+    DEFAULT_ACTIVITY_THRESHOLD,
+    DEFAULT_WEEKLY_SUMMARY_DAY,
+    DEFAULT_WEEKLY_SUMMARY_HOUR,
     DEFAULT_NTFY_SERVER,
     DEFAULT_DEPARTURE_DELAY,
     DEFAULT_ESCALATION_DELAY,
@@ -201,6 +211,29 @@ class CaregiverCoordinator:
         self.escalation_delay_minutes: int = data.get(CONF_ESCALATION_DELAY, DEFAULT_ESCALATION_DELAY)
         self._escalation_cancel: "Callable | None" = None
 
+        # Activity sensors — smart plugs etc. (V5.0)
+        self.activity_sensors: list[str] = data.get(CONF_ACTIVITY_SENSORS, [])
+        self.activity_threshold: float = float(
+            data.get(CONF_ACTIVITY_THRESHOLD, DEFAULT_ACTIVITY_THRESHOLD)
+        )
+
+        # Weekly summary (V5.0)
+        self.weekly_summary_enabled: bool = data.get(CONF_WEEKLY_SUMMARY_ENABLED, False)
+        self.weekly_summary_day: int = int(
+            data.get(CONF_WEEKLY_SUMMARY_DAY, DEFAULT_WEEKLY_SUMMARY_DAY)
+        )
+        self.weekly_summary_hour: int = int(
+            data.get(CONF_WEEKLY_SUMMARY_HOUR, DEFAULT_WEEKLY_SUMMARY_HOUR)
+        )
+
+        # WhatsApp / Callmebot (V5.0)
+        self.callmebot_phones: list[str] = [
+            p.strip()
+            for p in data.get(CONF_CALLMEBOT_PHONES, "").split(",")
+            if p.strip()
+        ]
+        self.callmebot_api_key: str = data.get(CONF_CALLMEBOT_API_KEY, "")
+
         # Departure detection config
         self.device_tracker: str = data.get(CONF_DEVICE_TRACKER, "")
         self.exit_sensors: list[str] = data.get(CONF_EXIT_SENSORS, [])
@@ -256,12 +289,14 @@ class CaregiverCoordinator:
 
         # Subscriptions
         self._unsub_motion: Callable | None = None
+        self._unsub_activity: Callable | None = None
         self._unsub_exit: Callable | None = None
         self._unsub_tracker: Callable | None = None
         self._unsub_wellness: Callable | None = None
         self._unsub_timer: Callable | None = None
         self._unsub_fall_timer: Callable | None = None
         self._unsub_nightly: Callable | None = None
+        self._unsub_weekly: Callable | None = None
 
     # -----------------------------------------------------------------
     # Setup / teardown
@@ -281,6 +316,16 @@ class CaregiverCoordinator:
             )
             _LOGGER.debug(
                 "Caregiver [%s]: tracking %d motion sensors", self.person_name, len(sensor_ids)
+            )
+
+        # Activity sensors (smart plugs, switches, etc.)
+        if self.activity_sensors:
+            self._unsub_activity = async_track_state_change_event(
+                self.hass, self.activity_sensors, self._on_activity_event
+            )
+            _LOGGER.debug(
+                "Caregiver [%s]: tracking %d activity sensors",
+                self.person_name, len(self.activity_sensors),
             )
 
         # Wellness / "I'm OK" button
@@ -329,6 +374,18 @@ class CaregiverCoordinator:
                 self.person_name,
             )
 
+        # Weekly summary timer
+        if self.weekly_summary_enabled:
+            self._unsub_weekly = async_track_time_change(
+                self.hass,
+                self._weekly_summary_tick,
+                hour=self.weekly_summary_hour, minute=0, second=0,
+            )
+            _LOGGER.debug(
+                "Caregiver [%s]: weekly summary scheduled day=%d hour=%02d:00",
+                self.person_name, self.weekly_summary_day, self.weekly_summary_hour,
+            )
+
         # Fall detection timer (only if camera configured)
         if self.camera_entity:
             self._unsub_fall_timer = async_track_time_interval(
@@ -345,12 +402,14 @@ class CaregiverCoordinator:
         """Remove subscriptions."""
         for unsub in [
             self._unsub_motion,
+            self._unsub_activity,
             self._unsub_exit,
             self._unsub_tracker,
             self._unsub_wellness,
             self._unsub_timer,
             self._unsub_fall_timer,
             self._unsub_nightly,
+            self._unsub_weekly,
         ]:
             if unsub:
                 unsub()
@@ -449,6 +508,69 @@ class CaregiverCoordinator:
         self._notify_entities()
 
     # -----------------------------------------------------------------
+    # Activity sensor handler (smart plug / switch / power sensor)
+    # -----------------------------------------------------------------
+
+    @callback
+    def _on_activity_event(self, event: Event) -> None:
+        """Handle state change from an activity sensor (smart plug, kettle, etc.)."""
+        new_state = event.data.get("new_state")
+        if new_state is None:
+            return
+
+        state_val = new_state.state
+        entity_id = event.data.get("entity_id", "")
+
+        # Determine if this state counts as "activity"
+        is_active = False
+        if state_val in ("on", "active", "detected", "open"):
+            is_active = True
+        else:
+            try:
+                power = float(state_val)
+                if power >= self.activity_threshold:
+                    is_active = True
+            except (ValueError, TypeError):
+                pass
+
+        if not is_active:
+            return
+
+        # Use the entity's friendly_name as the "room/activity" label
+        ha_state = self.hass.states.get(entity_id)
+        activity_name = (
+            ha_state.attributes.get("friendly_name", entity_id)
+            if ha_state else entity_id
+        )
+
+        now_ts = datetime.now().astimezone()
+        _LOGGER.debug(
+            "Caregiver [%s]: activity from %s (state=%s)",
+            self.person_name, activity_name, state_val,
+        )
+
+        self.last_motion_time = now_ts
+        self.last_motion_room = activity_name
+
+        if self.pattern_enabled:
+            self.pattern.record_motion(now_ts, activity_name)
+
+        if self.alert_active:
+            _LOGGER.info(
+                "Caregiver [%s]: activity from %s — clearing inactivity alert",
+                self.person_name, activity_name,
+            )
+            self.alert_active = False
+            self.alert_since = None
+            self.alert_reason = None
+            self.alert_ai_message = None
+            if self._escalation_cancel:
+                self._escalation_cancel()
+                self._escalation_cancel = None
+
+        self._notify_entities()
+
+    # -----------------------------------------------------------------
     # Wellness button handler ("I'm OK")
     # -----------------------------------------------------------------
 
@@ -506,6 +628,9 @@ class CaregiverCoordinator:
                 tasks.append(self._send_telegram(chat_id, title, message))
         if self.ntfy_topic:
             tasks.append(self._send_ntfy(title, message))
+        if self.callmebot_phones:
+            for phone in self.callmebot_phones:
+                tasks.append(self._send_whatsapp(phone, title, message))
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -672,6 +797,9 @@ class CaregiverCoordinator:
                 tasks.append(self._send_telegram(chat_id, title, message))
         if self.ntfy_topic:
             tasks.append(self._send_ntfy(title, message))
+        if self.callmebot_phones:
+            for phone in self.callmebot_phones:
+                tasks.append(self._send_whatsapp(phone, title, message))
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -935,6 +1063,9 @@ class CaregiverCoordinator:
                     tasks.append(self._send_telegram(chat_id, title, message))
         if self.ntfy_topic:
             tasks.append(self._send_ntfy(title, message))
+        if self.callmebot_phones:
+            for phone in self.callmebot_phones:
+                tasks.append(self._send_whatsapp(phone, title, message))
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1111,6 +1242,9 @@ class CaregiverCoordinator:
                 tasks.append(self._send_telegram(chat_id, title, message))
         if self.ntfy_topic:
             tasks.append(self._send_ntfy(title, message))
+        if self.callmebot_phones:
+            for phone in self.callmebot_phones:
+                tasks.append(self._send_whatsapp(phone, title, message))
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1122,6 +1256,83 @@ class CaregiverCoordinator:
         _LOGGER.info(
             "Caregiver [%s]: early warning sent (score=%d)", self.person_name, score
         )
+
+    # -----------------------------------------------------------------
+    # Weekly summary (V5.0)
+    # -----------------------------------------------------------------
+
+    @callback
+    def _weekly_summary_tick(self, now=None) -> None:
+        """Called every day at weekly_summary_hour — only fires on the configured weekday."""
+        check = now if now is not None else datetime.now().astimezone()
+        if check.weekday() != self.weekly_summary_day:
+            return
+        self.hass.async_create_task(self._send_weekly_summary())
+
+    async def _send_weekly_summary(self) -> None:
+        """Build and dispatch the weekly activity summary to all channels."""
+        name = self.person_name
+
+        # Gather stats from pattern learner
+        stats: dict = {}
+        trend_label = "—"
+        avg_wake = "—"
+        if self.pattern_enabled:
+            stats = self.pattern.get_week_stats()
+            trend, _ = self.pattern.get_weekly_trend()
+            lang = self._get_lang()
+            trend_labels_en = {
+                "stable": "stable", "slightly_declining": "slightly declining",
+                "declining": "declining", "improving": "improving",
+                "slightly_improving": "slightly improving", "insufficient_data": "insufficient data",
+            }
+            trend_labels_sv = {
+                "stable": "stabil", "slightly_declining": "svagt avtagande",
+                "declining": "avtagande", "improving": "förbättrad",
+                "slightly_improving": "svagt förbättrad", "insufficient_data": "för lite data",
+            }
+            trend_map = trend_labels_sv if lang == "sv" else trend_labels_en
+            trend_label = trend_map.get(trend, trend)
+            avg_fm = stats.get("avg_first_motion")
+            if avg_fm is not None:
+                h = int(avg_fm) // 60
+                m = int(avg_fm) % 60
+                avg_wake = f"{h:02d}:{m:02d}"
+
+        active_days = stats.get("active_days", "?")
+        total_days = stats.get("total_days", 7)
+
+        title = self._msg("weekly_summary_title", name=name)
+        message = self._msg(
+            "weekly_summary_message",
+            name=name,
+            active_days=active_days,
+            total_days=total_days,
+            avg_wake=avg_wake,
+            trend=trend_label,
+        )
+
+        tasks = []
+        for svc_full in [self.notify_primary, self.notify_secondary]:
+            if svc_full:
+                tasks.append(self._send_ha_notify(svc_full, title, message))
+        if self.telegram_bot_token and self.telegram_chat_ids:
+            for chat_id in self.telegram_chat_ids:
+                tasks.append(self._send_telegram(chat_id, title, message))
+        if self.ntfy_topic:
+            tasks.append(self._send_ntfy(title, message))
+        if self.callmebot_phones:
+            for phone in self.callmebot_phones:
+                tasks.append(self._send_whatsapp(phone, title, message))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    _LOGGER.error(
+                        "Caregiver [%s]: weekly summary error: %s", self.person_name, result
+                    )
+        _LOGGER.info("Caregiver [%s]: weekly summary sent", self.person_name)
 
     # -----------------------------------------------------------------
     # Inactivity alert sending
@@ -1147,6 +1358,10 @@ class CaregiverCoordinator:
 
         if self.ntfy_topic:
             tasks.append(self._send_ntfy(title, message))
+
+        if self.callmebot_phones:
+            for phone in self.callmebot_phones:
+                tasks.append(self._send_whatsapp(phone, title, message))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for result in results:
@@ -1197,6 +1412,9 @@ class CaregiverCoordinator:
                 tasks.append(self._send_telegram(chat_id, title, message))
         if self.ntfy_topic:
             tasks.append(self._send_ntfy(title, message))
+        if self.callmebot_phones:
+            for phone in self.callmebot_phones:
+                tasks.append(self._send_whatsapp(phone, title, message))
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1277,6 +1495,30 @@ class CaregiverCoordinator:
                     _LOGGER.error(
                         "Caregiver [%s]: ntfy error %d: %s",
                         self.person_name, resp.status, body,
+                    )
+
+    async def _send_whatsapp(self, phone: str, title: str, message: str) -> None:
+        """Send a WhatsApp message via Callmebot free API."""
+        import aiohttp
+        import urllib.parse
+        text = urllib.parse.quote(f"{title}\n{message}")
+        url = (
+            f"https://api.callmebot.com/whatsapp.php"
+            f"?phone={phone}&text={text}&apikey={self.callmebot_api_key}"
+        )
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=20)
+            ) as resp:
+                if resp.status == 200:
+                    _LOGGER.info(
+                        "Caregiver [%s]: WhatsApp sent to %s", self.person_name, phone
+                    )
+                else:
+                    body = await resp.text()
+                    _LOGGER.error(
+                        "Caregiver [%s]: WhatsApp error %d for %s: %s",
+                        self.person_name, resp.status, phone, body,
                     )
 
     # -----------------------------------------------------------------

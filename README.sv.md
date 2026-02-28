@@ -1,7 +1,7 @@
 # Caregiver Mode för Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
+[![Version](https://img.shields.io/badge/version-5.0.0-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Stöd_projektet-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/wizz666)
 
@@ -17,9 +17,10 @@ En Home Assistant-integration för att övervaka äldre eller sårbar person som
 
 ```
 Rörelsesensorer  ──►  Caregiver Mode  ──►  HA-mobilapp
-Dörrsensor       ──►  (lär sig rytm)  ──►  Telegram
-Kamera           ──►  (detekterar fall) ──►  Ntfy.sh
-Telefon-tracker  ──►  (spårar utgång) ──►  valfri kombination
+Smarta uttag     ──►  (lär sig rytm)  ──►  Telegram
+Dörrsensor       ──►  (detekterar fall) ──►  Ntfy.sh
+Kamera           ──►  (spårar utgång) ──►  WhatsApp (Callmebot)
+Telefon-tracker  ──►                  ──►  valfri kombination
 ```
 
 Integrationen körs helt inuti din Home Assistant-instans. Ingen molntjänst krävs för grundfunktionerna. AI-meddelandegenerering och vision-falldetektering är valfria och använder externa API:er bara om du konfigurerar dem.
@@ -36,7 +37,10 @@ Integrationen körs helt inuti din Home Assistant-instans. Ingen molntjänst kr�
 | **Veckotrender** *(V4)* | Detekterar gradvis nedgång i aktivitetsnivå vecka för vecka — innan en kris uppstår |
 | **"Jag mår bra"-knapp** *(V4)* | Personen kan trycka på valfri Zigbee-knapp för att skicka en välmåendebekräftelse och rensa larm |
 | **Eskaleringstrappa** *(V4)* | Om ingen svarar på larmet inom N minuter skickas ett andra larm till ytterligare kontakter |
-| **Flera notiskanaler** | HA-mobilapp, Telegram Bot, Ntfy.sh — valfri kombination, skickas parallellt |
+| **Smart plug-aktivitet** *(V5)* | Smarta uttag, switchar och effektsensorer räknas som livstecken vid sidan av rörelsesensorer |
+| **WhatsApp-notiser** *(V5)* | Gratis WhatsApp-meddelanden via Callmebot — inget abonnemang krävs |
+| **Veckosammanfattning** *(V5)* | Automatisk veckorapport om aktivitet skickas på vald dag och tid |
+| **Flera notiskanaler** | HA-mobilapp, Telegram Bot, Ntfy.sh, WhatsApp — valfri kombination, skickas parallellt |
 | **AI-genererade meddelanden** | Groq (gratis), Anthropic Claude eller OpenAI skriver lugna, kontextmedvetna larmtexter |
 | **Falldetektering** *(valfritt)* | Kamera + vision-AI detekterar en person liggande på golvet; bekräftar över flera bilder |
 | **Fall-snapshot** | Kamerabild sparas och skickas när fall bekräftats |
@@ -313,6 +317,60 @@ Trenden jämför de **senaste 7 dagarna** mot de **föregående 7–21 dagarna**
 - Genomsnittlig tid för första rörelse
 
 Detta kan upptäcka en gradvis nedgång veckor innan en hälsohändelse, och kan användas i HA-automationer (t.ex. skicka en veckosammanfattning om trenden är `declining`).
+
+---
+
+## V5.0-funktioner
+
+### Aktivitetssensorer (smarta uttag)
+
+Alla Home Assistant-entiteter — smarta uttag, switchar, effektsensorer, TV, hushållsmaskiner — kan nu räknas som "livstecken" vid sidan av rörelsesensorer. Kaffebryggaren som startar, TV:n som går på standby eller vattenkokaren som drar ström bekräftar alla att personen är uppe och aktiv.
+
+- **Binära sensorer och switchar**: aktiva när tillståndet är `on`, `active`, `detected` eller `open`
+- **Numeriska sensorer (effekt/energi)**: aktiva när avläsningen överstiger ett konfigurerbart watt-tröskelvärde (standard 5 W)
+- Entitetens **visningsnamn** används som rumsetikett i larmmeddelanden
+- **Fungerar med alla HA-domäner** — switch, sensor, binary_sensor, media_player, m.m.
+
+**Konfigurera:** Inställningar → Integrationer → Caregiver Mode → Konfigurera → **Aktivitetssensorer**
+
+---
+
+### WhatsApp-notiser
+
+Gratis WhatsApp-meddelanden via [Callmebot](https://www.callmebot.com/blog/free-api-whatsapp-messages/) — inget abonnemang, inget Meta Business-konto krävs.
+
+Alla larm- och notistyper (inaktivitet, tidig varning, fall, avgång, välmåendebekräftelse, eskalering och veckosammanfattning) skickas till WhatsApp parallellt med övriga kanaler.
+
+**Engångsaktivering per mottagare:**
+1. Öppna WhatsApp och skicka detta meddelande till **+34 644 96 38 86**:
+   `I allow callmebot to send me messages`
+2. Inom några minuter får du en API-nyckel via WhatsApp
+3. Ange telefonnummer(n) och nyckeln i HA
+
+**Konfigurera:** Inställningar → Integrationer → Caregiver Mode → Konfigurera → **Notifikationskanaler**
+
+---
+
+### Veckosammanfattning
+
+En automatisk aktivitetsrapport skickas på en konfigurerbar veckodag och tid. Rapporten innehåller:
+- Hur många av de senaste 7 dagarna som hade registrerad aktivitet
+- Genomsnittlig tid för första rörelse (uppvakkningstid)
+- Veckotrender (stabil / svagt sjunkande / sjunkande / förbättrande)
+
+Kräver minst 7 dagars mönsterinlärningsdata.
+
+Exempel:
+> 📊 Veckosammanfattning – Farmor
+> Senaste veckan: Farmor var aktiv 6/7 dagar. Genomsnittlig uppvakkningstid: 07:34. Veckans trend: Stabil.
+
+**Konfigurera:** Inställningar → Integrationer → Caregiver Mode → Konfigurera → **Veckosammanfattning**
+
+| Fält | Beskrivning | Standard |
+|---|---|---|
+| Aktivera veckosammanfattning | På/av | av |
+| Skicka på veckodag | Måndag (0) … Söndag (6) | Måndag |
+| Skicka vid timme | 0–23 | 08:00 |
 
 ---
 

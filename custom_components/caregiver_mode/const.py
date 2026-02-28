@@ -76,6 +76,22 @@ CONF_GROQ_VISION_MODEL = "groq_vision_model"
 
 FALL_POLL_INTERVAL = 60  # seconds between fall detection snapshots
 
+# Activity sensors — smart plugs etc. (V5.0)
+CONF_ACTIVITY_SENSORS = "activity_sensors"    # list[str] — entity_ids
+CONF_ACTIVITY_THRESHOLD = "activity_threshold" # float — Watts; numeric state > threshold = activity
+DEFAULT_ACTIVITY_THRESHOLD = 5.0
+
+# Weekly summary (V5.0)
+CONF_WEEKLY_SUMMARY_ENABLED = "weekly_summary_enabled"
+CONF_WEEKLY_SUMMARY_DAY = "weekly_summary_day"   # int 0=Monday … 6=Sunday
+CONF_WEEKLY_SUMMARY_HOUR = "weekly_summary_hour"  # int 0-23
+DEFAULT_WEEKLY_SUMMARY_DAY = 0   # Monday
+DEFAULT_WEEKLY_SUMMARY_HOUR = 8  # 08:00
+
+# WhatsApp via Callmebot (V5.0)
+CONF_CALLMEBOT_PHONES = "callmebot_phones"    # str — comma-separated phone numbers (+46…)
+CONF_CALLMEBOT_API_KEY = "callmebot_api_key"  # str — Callmebot API key
+
 # Wellness button (V4.0)
 CONF_WELLNESS_BUTTON = "wellness_button"
 
@@ -164,6 +180,11 @@ MESSAGES: dict[str, dict] = {
             "{name} was last seen in {room} at {time}. "
             "This escalation is being sent to additional contacts."
         ),
+        "weekly_summary_title": "📊 Weekly summary – {name}",
+        "weekly_summary_message": (
+            "Past week: {name} was active {active_days}/{total_days} days. "
+            "Average wake time: {avg_wake}. Weekly trend: {trend}."
+        ),
         "departure": {
             "tracker_left": (
                 "📱 {name} has left home",
@@ -226,6 +247,11 @@ MESSAGES: dict[str, dict] = {
             "Larmet skickades för {delay} minuter sedan utan bekräftelse. "
             "{name} registrerades senast i {room} kl {time}. "
             "Detta är en eskalering till ytterligare kontakter."
+        ),
+        "weekly_summary_title": "📊 Veckosammanfattning – {name}",
+        "weekly_summary_message": (
+            "Förra veckan var {name} aktiv {active_days}/{total_days} dagar. "
+            "Genomsnittlig uppvakningstid: {avg_wake}. Veckotrend: {trend}."
         ),
         "departure": {
             "tracker_left": (

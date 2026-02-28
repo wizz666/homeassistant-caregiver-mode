@@ -1,7 +1,7 @@
 # Caregiver Mode for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
+[![Version](https://img.shields.io/badge/version-5.0.0-blue.svg)](https://github.com/wizz666/homeassistant-caregiver-mode/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support_this_project-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/wizz666)
 
@@ -17,9 +17,10 @@ A Home Assistant integration for monitoring elderly or vulnerable persons living
 
 ```
 Motion sensors  ──►  Caregiver Mode  ──►  HA mobile app
-Door sensor     ──►  (learns rhythm)  ──►  Telegram
-Camera          ──►  (detects fall)   ──►  Ntfy.sh
-Phone tracker   ──►  (tracks exits)   ──►  any combination
+Smart plugs     ──►  (learns rhythm)  ──►  Telegram
+Door sensor     ──►  (detects fall)   ──►  Ntfy.sh
+Camera          ──►  (tracks exits)   ──►  WhatsApp (Callmebot)
+Phone tracker   ──►                   ──►  any combination
 ```
 
 The integration runs entirely within your Home Assistant instance. No cloud service is required for the core features. AI message generation and vision fall detection are optional and use external APIs only if you configure them.
@@ -36,7 +37,10 @@ The integration runs entirely within your Home Assistant instance. No cloud serv
 | **Weekly trend** *(V4)* | Detects gradual decline in activity level week over week — before a crisis develops |
 | **"I'm OK" button** *(V4)* | The monitored person can press any Zigbee button to send a wellness confirmation and clear alerts |
 | **Escalation chain** *(V4)* | If nobody responds to an alert within N minutes, a second alert goes to additional contacts |
-| **Multi-channel notifications** | HA mobile app, Telegram Bot, Ntfy.sh — any combination, sent in parallel |
+| **Smart plug activity** *(V5)* | Smart plugs, switches, and power sensors count as life signs alongside motion sensors |
+| **WhatsApp notifications** *(V5)* | Free WhatsApp messages via Callmebot — no subscription required |
+| **Weekly summary report** *(V5)* | Automatic weekly activity report sent on a configured day and time |
+| **Multi-channel notifications** | HA mobile app, Telegram Bot, Ntfy.sh, WhatsApp — any combination, sent in parallel |
 | **AI-generated messages** | Groq (free), Anthropic Claude, or OpenAI writes calm, context-aware alert text |
 | **Fall detection** *(optional)* | Camera + vision AI detects a person lying on the floor; confirms across multiple frames |
 | **Fall snapshot** | Camera image saved and sent when a fall is confirmed |
@@ -121,6 +125,22 @@ Example:
 - **Kitchen** → `binary_sensor.pir_kitchen`, `binary_sensor.motion_fridge_area`
 - **Bathroom** → `binary_sensor.pir_bathroom`
 
+### Step 2b – Activity sensors *(optional)*
+
+Smart plugs, switches, or power sensors that also count as "life signs". The coffee maker turning on at 08:00 is as valid a sign of life as a motion sensor.
+
+| Sensor type | Counts as active when... |
+|---|---|
+| Binary sensor / switch | State is `on`, `active`, `detected`, or `open` |
+| Power sensor (numeric) | Reading exceeds the configured watt threshold |
+
+The entity's friendly name is used as the room label in notifications. Any HA domain is supported — no need to match motion sensors.
+
+| Field | Description | Default |
+|---|---|---|
+| Activity sensors | Select any entities from HA | — |
+| Power threshold (W) | Minimum watts to count as activity for numeric sensors | 5 W |
+
 ### Step 3 – Notifications
 
 At least one notification channel must be configured.
@@ -145,6 +165,19 @@ At least one notification channel must be configured.
 |---|---|
 | Topic | e.g. `grandma-alerts` |
 | Server URL | `https://ntfy.sh` or your self-hosted instance |
+
+**WhatsApp via Callmebot** *(V5, free)*
+
+Send free WhatsApp messages to one or more phone numbers.
+
+**Activation (one-time setup):**
+1. From each recipient's WhatsApp, send: `I allow callmebot to send me messages` to **+34 644 96 38 86**
+2. You will receive an API key by WhatsApp — enter it in HA
+
+| Field | Description |
+|---|---|
+| Phone numbers | Comma-separated, international format (e.g. `+46701234567,+46709876543`) |
+| Callmebot API key | Received from Callmebot after activation |
 
 **AI messages** *(optional)*
 
@@ -313,6 +346,62 @@ The trend compares the **last 7 days** against the **previous 7–21 days** on t
 - Average time of first motion
 
 This can detect gradual decline weeks before a health event, and can be used in HA automations (e.g. send a weekly summary if trend is `declining`).
+
+---
+
+## V5.0 features
+
+### Smart plug / activity sensors
+
+Any Home Assistant entity — smart plug, switch, power sensor, TV, appliance — can now count as a "life sign" alongside motion sensors. The coffee maker turning on, the TV switching to standby, or the kettle drawing current all confirm the person is up and active.
+
+This is especially useful in rooms where motion sensors are impractical (e.g. a small kitchen), or as redundancy when sensors occasionally miss movement.
+
+- **Binary sensors and switches**: active when state is `on`, `active`, `detected`, or `open`
+- **Numeric sensors (power/energy)**: active when the reading exceeds a configurable watt threshold (default 5 W)
+- The entity's **friendly name** is used as the room label in alert messages
+- **Works with any HA domain** — switch, sensor, binary_sensor, media_player, etc.
+
+**Configure:** Settings → Integrations → Caregiver Mode → Configure → **Activity sensors**
+
+---
+
+### WhatsApp notifications
+
+Free WhatsApp messages via [Callmebot](https://www.callmebot.com/blog/free-api-whatsapp-messages/) — no subscription, no Meta Business account required.
+
+Every alert and notification type (inactivity, early warning, fall, departure, wellness confirmation, escalation, and weekly summary) is sent to WhatsApp alongside other configured channels.
+
+**One-time activation per recipient:**
+1. Open WhatsApp and send this message to **+34 644 96 38 86**:
+   `I allow callmebot to send me messages`
+2. Within minutes you'll receive an API key by WhatsApp
+3. Enter the phone number(s) and the key in HA
+
+**Configure:** Settings → Integrations → Caregiver Mode → Configure → **Notification channels**
+
+---
+
+### Weekly summary report
+
+An automatic activity report is sent on a configurable weekday and time. The report includes:
+- How many of the last 7 days had detected activity
+- Average first movement time (wake time)
+- Weekly trend (stable / slightly declining / declining / improving)
+
+Requires at least 7 days of pattern learning data.
+
+Example:
+> 📊 Weekly summary – Grandma
+> Past week: Grandma was active 6/7 days. Average wake time: 07:34. Weekly trend: Stable.
+
+**Configure:** Settings → Integrations → Caregiver Mode → Configure → **Weekly summary**
+
+| Field | Description | Default |
+|---|---|---|
+| Enable weekly summary | Turn on/off | off |
+| Send on weekday | Monday (0) … Sunday (6) | Monday |
+| Send at hour | 0–23 | 08:00 |
 
 ---
 

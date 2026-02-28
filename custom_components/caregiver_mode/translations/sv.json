@@ -29,9 +29,17 @@
           "motion_sensors": "Rörelsesensorer i detta rum"
         }
       },
+      "activity": {
+        "title": "Caregiver Mode – Aktivitetssensorer",
+        "description": "Valfritt: välj smarta eluttag, switchar eller effektsensorer som signalerar att personen är aktiv (t.ex. kaffebryggare, vattenkokare, TV). Dessa räknas som 'livstecken' utöver rörelsesensorer.\n\nFör effektsensorer avgör tröskeln hur många watt avläsningen måste överstiga för att räknas som aktivitet.",
+        "data": {
+          "activity_sensors": "Aktivitetssensorer (valfri domän)",
+          "activity_threshold": "Effekttröskel (W) för numeriska sensorer"
+        }
+      },
       "notifications": {
         "title": "Caregiver Mode – Notifikationer",
-        "description": "Konfigurera hur larm skickas. Minst en kanal (HA-app, Telegram eller Ntfy) måste konfigureras.",
+        "description": "Konfigurera hur larm skickas. Minst en kanal (HA-app, Telegram, Ntfy eller WhatsApp) måste konfigureras.\n\nWhatsApp via Callmebot är gratis. Aktivera det först: skicka 'I allow callmebot to send me messages' till +34 644 96 38 86 på WhatsApp, och använd sedan API-nyckeln du får tillbaka.",
         "data": {
           "notify_primary": "Primär notifikationstjänst (t.ex. notify.mobile_app_iphone)",
           "notify_secondary": "Sekundär notifikationstjänst (valfri)",
@@ -43,7 +51,9 @@
           "ai_provider": "AI-leverantör",
           "ai_api_key": "AI API-nyckel",
           "escalation_services": "Eskaleringsmottagare – notifikationstjänster (kommaseparerade, t.ex. notify.mobile_app_son)",
-          "escalation_delay": "Minuter innan eskalering skickas om ingen svarar (5–60)"
+          "escalation_delay": "Minuter innan eskalering skickas om ingen svarar (5–60)",
+          "callmebot_phones": "WhatsApp-nummer (kommaseparerade, internationellt format: +46701234567)",
+          "callmebot_api_key": "Callmebot API-nyckel (från aktiveringsmeddelandet)"
         }
       },
       "departure": {
@@ -77,7 +87,8 @@
       "invalid_notify": "Notifikationstjänsten måste börja med 'notify.'",
       "ai_key_required": "API-nyckel krävs när AI-meddelanden är aktiverade.",
       "telegram_chat_id_required": "Minst ett Telegram chat-ID krävs när ett bot-token angetts.",
-      "no_channel_configured": "Minst en notifikationskanal måste konfigureras (HA-app, Telegram eller Ntfy).",
+      "no_channel_configured": "Minst en notifikationskanal måste konfigureras (HA-app, Telegram, Ntfy eller WhatsApp).",
+      "callmebot_key_required": "Callmebot API-nyckel krävs när telefonnummer angivits.",
       "vision_key_required": "API-nyckel krävs för vald vision-leverantör (krävs ej för Ollama)."
     },
     "abort": {
@@ -98,7 +109,9 @@
           "departure": "Hemlämnig-detektion",
           "camera": "Falldetektering (kamera & AI)",
           "language": "Notifikationsspråk",
-          "pattern": "Mönsterinlärning (avvikelsedetektering)"
+          "pattern": "Mönsterinlärning (avvikelsedetektering)",
+          "activity": "Aktivitetssensorer",
+          "weekly_summary": "Veckosammanfattning"
         }
       },
       "timing": {
@@ -157,21 +170,6 @@
           "room_name": "Rum att ta bort"
         }
       },
-      "notifications": {
-        "title": "Caregiver Mode – Notifikationer",
-        "description": "Konfigurera hur larm skickas. Minst en kanal (HA-app, Telegram eller Ntfy) måste konfigureras.",
-        "data": {
-          "notify_primary": "Primär notifikationstjänst (t.ex. notify.mobile_app_iphone)",
-          "notify_secondary": "Sekundär notifikationstjänst (valfri)",
-          "telegram_bot_token": "Telegram bot-token",
-          "telegram_chat_ids": "Telegram chat-ID(n) (kommaseparerade)",
-          "ntfy_topic": "Ntfy.sh ämne (topic)",
-          "ntfy_server": "Ntfy.sh server-URL",
-          "ai_enabled": "Aktivera AI-genererade larmmeddelanden",
-          "ai_provider": "AI-leverantör",
-          "ai_api_key": "AI API-nyckel"
-        }
-      },
       "departure": {
         "title": "Caregiver Mode – Hemlämnig-detektion",
         "description": "Identifiera när personen lämnar hemmet. Ändringar sparas direkt.",
@@ -210,6 +208,40 @@
           "escalation_services": "Eskaleringsmottagare – notifikationstjänster (kommaseparerade)",
           "escalation_delay": "Minuter innan eskalering skickas (5–60)"
         }
+      },
+      "activity": {
+        "title": "Caregiver Mode – Aktivitetssensorer",
+        "description": "Smarta eluttag, switchar eller effektsensorer som signalerar att personen är aktiv (t.ex. kaffebryggare, vattenkokare, TV). Dessa räknas som 'livstecken' vid sidan av rörelsesensorer.\n\nFör effektsensorer avgör tröskeln hur många watt avläsningen måste överstiga för att räknas som aktivitet.",
+        "data": {
+          "activity_sensors": "Aktivitetssensorer (valfri domän)",
+          "activity_threshold": "Effekttröskel (W) för numeriska sensorer"
+        }
+      },
+      "weekly_summary": {
+        "title": "Caregiver Mode – Veckosammanfattning",
+        "description": "Skickar en automatisk aktivitetsrapport på vald dag och tid. Rapporten innehåller hur många dagar personen var aktiv, genomsnittlig uppvakkningstid och veckans trend.\n\nKräver minst 7 dagars mönsterinlärningsdata.",
+        "data": {
+          "weekly_summary_enabled": "Aktivera veckosammanfattning",
+          "weekly_summary_day": "Skicka på veckodag",
+          "weekly_summary_hour": "Skicka vid timme (0–23)"
+        }
+      },
+      "notifications": {
+        "title": "Caregiver Mode – Notifikationer",
+        "description": "Konfigurera notifikationskanaler. Minst en (HA-app, Telegram, Ntfy eller WhatsApp) måste anges.\n\nWhatsApp via Callmebot är gratis. Aktivera det först: skicka 'I allow callmebot to send me messages' till +34 644 96 38 86 på WhatsApp.",
+        "data": {
+          "notify_primary": "Primär notifikationstjänst",
+          "notify_secondary": "Sekundär notifikationstjänst (valfri)",
+          "telegram_bot_token": "Telegram bot-token",
+          "telegram_chat_ids": "Telegram chat-ID(n) (kommaseparerade)",
+          "ntfy_topic": "Ntfy.sh ämne (topic)",
+          "ntfy_server": "Ntfy.sh server-URL",
+          "ai_enabled": "Aktivera AI-genererade larmmeddelanden",
+          "ai_provider": "AI-leverantör",
+          "ai_api_key": "AI API-nyckel",
+          "callmebot_phones": "WhatsApp-nummer (kommaseparerade, t.ex. +46701234567)",
+          "callmebot_api_key": "Callmebot API-nyckel"
+        }
       }
     },
     "error": {
@@ -220,7 +252,8 @@
       "invalid_notify": "Notifikationstjänsten måste börja med 'notify.'",
       "ai_key_required": "API-nyckel krävs när AI-meddelanden är aktiverade.",
       "telegram_chat_id_required": "Minst ett Telegram chat-ID krävs när ett bot-token angetts.",
-      "no_channel_configured": "Minst en notifikationskanal måste konfigureras (HA-app, Telegram eller Ntfy).",
+      "no_channel_configured": "Minst en notifikationskanal måste konfigureras (HA-app, Telegram, Ntfy eller WhatsApp).",
+      "callmebot_key_required": "Callmebot API-nyckel krävs när telefonnummer angivits.",
       "vision_key_required": "API-nyckel krävs för vald vision-leverantör (krävs ej för Ollama)."
     }
   },

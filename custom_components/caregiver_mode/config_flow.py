@@ -37,6 +37,13 @@ from .const import (
     CONF_OLLAMA_MODEL,
     CONF_FALL_CONFIRM_COUNT,
     CONF_GROQ_VISION_MODEL,
+    CONF_ACTIVITY_SENSORS,
+    CONF_ACTIVITY_THRESHOLD,
+    CONF_WEEKLY_SUMMARY_ENABLED,
+    CONF_WEEKLY_SUMMARY_DAY,
+    CONF_WEEKLY_SUMMARY_HOUR,
+    CONF_CALLMEBOT_PHONES,
+    CONF_CALLMEBOT_API_KEY,
     CONF_WELLNESS_BUTTON,
     CONF_ESCALATION_SERVICES,
     CONF_ESCALATION_DELAY,
@@ -44,6 +51,9 @@ from .const import (
     CONF_PATTERN_ENABLED,
     CONF_ANOMALY_ALERT_ENABLED,
     CONF_ANOMALY_ALERT_THRESHOLD,
+    DEFAULT_ACTIVITY_THRESHOLD,
+    DEFAULT_WEEKLY_SUMMARY_DAY,
+    DEFAULT_WEEKLY_SUMMARY_HOUR,
     DEFAULT_NTFY_SERVER,
     DEFAULT_PERSON_NAME,
     DEFAULT_ACTIVE_START,
@@ -351,11 +361,43 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_done_rooms(self, user_input=None):
-        """Finalize rooms and proceed to notifications."""
+        """Finalize rooms and proceed to activity sensors."""
         all_sensors, sensor_room_map = _rooms_to_data(self._rooms)
         self._data[CONF_MOTION_SENSORS] = all_sensors
         self._data[CONF_ROOM_NAMES] = sensor_room_map
-        return await self.async_step_notifications()
+        return await self.async_step_activity()
+
+    # ------------------------------------------------------------------
+    # Step 2b: Activity sensors (smart plugs, switches, etc.)
+    # ------------------------------------------------------------------
+
+    async def async_step_activity(self, user_input=None):
+        """Optional step: configure activity sensors (smart plugs, kettles, etc.)."""
+        if user_input is not None:
+            self._data[CONF_ACTIVITY_SENSORS] = user_input.get(CONF_ACTIVITY_SENSORS, [])
+            self._data[CONF_ACTIVITY_THRESHOLD] = user_input.get(
+                CONF_ACTIVITY_THRESHOLD, DEFAULT_ACTIVITY_THRESHOLD
+            )
+            return await self.async_step_notifications()
+
+        schema = vol.Schema(
+            {
+                vol.Optional(CONF_ACTIVITY_SENSORS, default=[]): selector.EntitySelector(
+                    selector.EntitySelectorConfig(multiple=True)
+                ),
+                vol.Optional(
+                    CONF_ACTIVITY_THRESHOLD, default=DEFAULT_ACTIVITY_THRESHOLD
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1.0, max=500.0, step=1.0,
+                        mode=selector.NumberSelectorMode.BOX,
+                        unit_of_measurement="W",
+                    )
+                ),
+            }
+        )
+
+        return self.async_show_form(step_id="activity", data_schema=schema)
 
     # ------------------------------------------------------------------
     # Step 3: Notifications
@@ -382,6 +424,10 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_TELEGRAM_CHAT_IDS] = "telegram_chat_id_required"
 
             ntfy_topic = user_input.get(CONF_NTFY_TOPIC, "").strip()
+            callmebot_phones = user_input.get(CONF_CALLMEBOT_PHONES, "").strip()
+            callmebot_key = user_input.get(CONF_CALLMEBOT_API_KEY, "").strip()
+            if callmebot_phones and not callmebot_key:
+                errors[CONF_CALLMEBOT_API_KEY] = "callmebot_key_required"
 
             ai_enabled = user_input.get(CONF_AI_ENABLED, False)
             ai_key = user_input.get(CONF_AI_API_KEY, "").strip()
@@ -389,7 +435,7 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_AI_API_KEY] = "ai_key_required"
 
             if not errors:
-                if not primary and not telegram_token and not ntfy_topic:
+                if not primary and not telegram_token and not ntfy_topic and not callmebot_phones:
                     errors["base"] = "no_channel_configured"
 
             if not errors:
@@ -417,13 +463,14 @@ class CaregiverModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(
                     CONF_ESCALATION_DELAY, default=DEFAULT_ESCALATION_DELAY
                 ): vol.All(int, vol.Range(min=5, max=60)),
+                vol.Optional(CONF_CALLMEBOT_PHONES, default=""): str,
+                vol.Optional(CONF_CALLMEBOT_API_KEY, default=""): str,
             }
         )
 
         return self.async_show_form(
             step_id="notifications", data_schema=schema, errors=errors
         )
-
 
     async def async_step_departure(self, user_input=None):
         """Step 4: Optional departure detection (phone + exit door sensors) + wellness button."""
@@ -570,6 +617,10 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_pattern()
             if action == "wellness_escalation":
                 return await self.async_step_wellness_escalation()
+            if action == "activity":
+                return await self.async_step_activity()
+            if action == "weekly_summary":
+                return await self.async_step_weekly_summary()
 
         schema = vol.Schema(
             {
@@ -577,12 +628,14 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                     [
                         ("timing", "Timing & alert thresholds"),
                         ("rooms", "Manage rooms"),
+                        ("activity", "Activity sensors (smart plugs, switches)"),
                         ("notifications", "Notification channels"),
                         ("departure", "Departure detection (phone & door)"),
                         ("camera", "Fall detection (camera & AI)"),
                         ("language", "Notification language"),
                         ("pattern", "Pattern learning (anomaly detection)"),
                         ("wellness_escalation", "Wellness button & escalation chain"),
+                        ("weekly_summary", "Weekly summary report"),
                     ]
                 )
             }
@@ -863,6 +916,10 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                 errors[CONF_TELEGRAM_CHAT_IDS] = "telegram_chat_id_required"
 
             ntfy_topic = user_input.get(CONF_NTFY_TOPIC, "").strip()
+            callmebot_phones = user_input.get(CONF_CALLMEBOT_PHONES, "").strip()
+            callmebot_key = user_input.get(CONF_CALLMEBOT_API_KEY, "").strip()
+            if callmebot_phones and not callmebot_key:
+                errors[CONF_CALLMEBOT_API_KEY] = "callmebot_key_required"
 
             ai_enabled = user_input.get(CONF_AI_ENABLED, False)
             ai_key = user_input.get(CONF_AI_API_KEY, "").strip()
@@ -870,7 +927,7 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                 errors[CONF_AI_API_KEY] = "ai_key_required"
 
             if not errors:
-                if not primary and not telegram_token and not ntfy_topic:
+                if not primary and not telegram_token and not ntfy_topic and not callmebot_phones:
                     errors["base"] = "no_channel_configured"
 
             if not errors:
@@ -916,6 +973,14 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
                 ): vol.In(AI_PROVIDERS),
                 vol.Optional(
                     CONF_AI_API_KEY, default=merged.get(CONF_AI_API_KEY, "")
+                ): str,
+                vol.Optional(
+                    CONF_CALLMEBOT_PHONES,
+                    default=merged.get(CONF_CALLMEBOT_PHONES, ""),
+                ): str,
+                vol.Optional(
+                    CONF_CALLMEBOT_API_KEY,
+                    default=merged.get(CONF_CALLMEBOT_API_KEY, ""),
                 ): str,
             }
         )
@@ -1095,3 +1160,86 @@ class CaregiverModeOptionsFlow(config_entries.OptionsFlow):
         )
 
         return self.async_show_form(step_id="pattern", data_schema=schema)
+
+    # ------------------------------------------------------------------
+    # Activity sensors section (V5.0)
+    # ------------------------------------------------------------------
+
+    async def async_step_activity(self, user_input=None):
+        """Configure activity sensors (smart plugs, switches, power sensors)."""
+        merged = self._merged()
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title="", data=self._save_options(user_input)
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_ACTIVITY_SENSORS,
+                    default=merged.get(CONF_ACTIVITY_SENSORS, []),
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(multiple=True)
+                ),
+                vol.Optional(
+                    CONF_ACTIVITY_THRESHOLD,
+                    default=merged.get(CONF_ACTIVITY_THRESHOLD, DEFAULT_ACTIVITY_THRESHOLD),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1.0, max=500.0, step=1.0,
+                        mode=selector.NumberSelectorMode.BOX,
+                        unit_of_measurement="W",
+                    )
+                ),
+            }
+        )
+
+        return self.async_show_form(step_id="activity", data_schema=schema)
+
+    # ------------------------------------------------------------------
+    # Weekly summary section (V5.0)
+    # ------------------------------------------------------------------
+
+    async def async_step_weekly_summary(self, user_input=None):
+        """Configure the weekly activity summary report."""
+        merged = self._merged()
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title="", data=self._save_options(user_input)
+            )
+
+        weekday_options = [
+            selector.SelectOptionDict(value="0", label="Monday / Måndag"),
+            selector.SelectOptionDict(value="1", label="Tuesday / Tisdag"),
+            selector.SelectOptionDict(value="2", label="Wednesday / Onsdag"),
+            selector.SelectOptionDict(value="3", label="Thursday / Torsdag"),
+            selector.SelectOptionDict(value="4", label="Friday / Fredag"),
+            selector.SelectOptionDict(value="5", label="Saturday / Lördag"),
+            selector.SelectOptionDict(value="6", label="Sunday / Söndag"),
+        ]
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_WEEKLY_SUMMARY_ENABLED,
+                    default=merged.get(CONF_WEEKLY_SUMMARY_ENABLED, False),
+                ): bool,
+                vol.Optional(
+                    CONF_WEEKLY_SUMMARY_DAY,
+                    default=str(merged.get(CONF_WEEKLY_SUMMARY_DAY, DEFAULT_WEEKLY_SUMMARY_DAY)),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=weekday_options,
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                ),
+                vol.Optional(
+                    CONF_WEEKLY_SUMMARY_HOUR,
+                    default=merged.get(CONF_WEEKLY_SUMMARY_HOUR, DEFAULT_WEEKLY_SUMMARY_HOUR),
+                ): vol.All(int, vol.Range(min=0, max=23)),
+            }
+        )
+
+        return self.async_show_form(step_id="weekly_summary", data_schema=schema)

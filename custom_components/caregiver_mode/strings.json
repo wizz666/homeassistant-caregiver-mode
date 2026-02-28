@@ -29,9 +29,17 @@
           "motion_sensors": "Motion sensors in this room"
         }
       },
+      "activity": {
+        "title": "Caregiver Mode – Activity Sensors",
+        "description": "Optional: select smart plugs, switches, or power sensors that signal the person is active (e.g. coffee maker, kettle, TV). These count as 'life signs' in addition to motion sensors.\n\nFor power sensors the threshold sets how many watts the reading must exceed to count as activity.",
+        "data": {
+          "activity_sensors": "Activity sensors (any domain)",
+          "activity_threshold": "Power threshold (W) for numeric sensors"
+        }
+      },
       "notifications": {
         "title": "Caregiver Mode – Notifications",
-        "description": "Configure how alerts are sent. At least one channel (HA app, Telegram, or Ntfy) must be configured.",
+        "description": "Configure how alerts are sent. At least one channel (HA app, Telegram, Ntfy, or WhatsApp) must be configured.\n\nWhatsApp via Callmebot is free. First activate it: send 'I allow callmebot to send me messages' to +34 644 96 38 86 on WhatsApp, then use the API key you receive.",
         "data": {
           "notify_primary": "Primary notification service (e.g. notify.mobile_app_iphone)",
           "notify_secondary": "Secondary notification service (optional)",
@@ -43,7 +51,9 @@
           "ai_provider": "AI provider",
           "ai_api_key": "AI API key",
           "escalation_services": "Escalation contacts – notify services (comma-separated, e.g. notify.mobile_app_son)",
-          "escalation_delay": "Minutes before escalation fires if no response (5–60)"
+          "escalation_delay": "Minutes before escalation fires if no response (5–60)",
+          "callmebot_phones": "WhatsApp phone numbers (comma-separated, international format: +46701234567)",
+          "callmebot_api_key": "Callmebot API key (from the activation message)"
         }
       },
       "departure": {
@@ -210,6 +220,40 @@
           "escalation_services": "Escalation contacts – notify services (comma-separated)",
           "escalation_delay": "Minutes before escalation fires (5–60)"
         }
+      },
+      "activity": {
+        "title": "Caregiver Mode – Activity Sensors",
+        "description": "Smart plugs, switches, or power sensors that signal the person is active (e.g. coffee maker, kettle, TV). These count as 'life signs' alongside motion sensors.\n\nFor power sensors: the threshold sets how many watts must be exceeded to count as activity.",
+        "data": {
+          "activity_sensors": "Activity sensors (any domain)",
+          "activity_threshold": "Power threshold (W) for numeric sensors"
+        }
+      },
+      "weekly_summary": {
+        "title": "Caregiver Mode – Weekly Summary",
+        "description": "Sends an automatic activity report on the chosen day and time. The report includes how many days the person was active, average wake time, and the weekly trend.\n\nRequires at least 7 days of pattern learning data.",
+        "data": {
+          "weekly_summary_enabled": "Enable weekly summary",
+          "weekly_summary_day": "Send on weekday",
+          "weekly_summary_hour": "Send at hour (0–23)"
+        }
+      },
+      "notifications": {
+        "title": "Caregiver Mode – Notifications",
+        "description": "Configure notification channels. At least one (HA app, Telegram, Ntfy, or WhatsApp) must be set.\n\nWhatsApp via Callmebot is free. First activate it: send 'I allow callmebot to send me messages' to +34 644 96 38 86 on WhatsApp.",
+        "data": {
+          "notify_primary": "Primary notification service",
+          "notify_secondary": "Secondary notification service (optional)",
+          "telegram_bot_token": "Telegram bot token",
+          "telegram_chat_ids": "Telegram chat ID(s) (comma-separated)",
+          "ntfy_topic": "Ntfy.sh topic",
+          "ntfy_server": "Ntfy.sh server URL",
+          "ai_enabled": "Enable AI-generated alert messages",
+          "ai_provider": "AI provider",
+          "ai_api_key": "AI API key",
+          "callmebot_phones": "WhatsApp phone numbers (comma-separated, e.g. +46701234567)",
+          "callmebot_api_key": "Callmebot API key"
+        }
       }
     },
     "error": {
@@ -220,7 +264,8 @@
       "invalid_notify": "Notification service must start with 'notify.'",
       "ai_key_required": "API key is required when AI messages are enabled.",
       "telegram_chat_id_required": "At least one Telegram chat ID is required when a bot token is provided.",
-      "no_channel_configured": "At least one notification channel must be configured (HA app, Telegram, or Ntfy).",
+      "no_channel_configured": "At least one notification channel must be configured (HA app, Telegram, Ntfy, or WhatsApp).",
+      "callmebot_key_required": "Callmebot API key is required when phone numbers are entered.",
       "vision_key_required": "API key is required for the selected vision provider (not needed for Ollama)."
     }
   },
