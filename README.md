@@ -190,27 +190,37 @@ Pattern learning observes the person's daily movement rhythm and computes an **a
 
 ### How it works
 
+**You do not need to configure anything.** The integration starts collecting data automatically from day one. You never need to tell it when the person normally wakes up — it figures that out by itself.
+
 The integration records two things each day:
 - The time of the person's **first motion** (e.g. 07:27)
 - Which **hours** had at least one motion event
 
-Every night at 02:00 the data is finalized and a statistical model is computed per weekday. After 7 days the anomaly sensor becomes active.
+Every night at 02:00 the data is finalized and a statistical model is computed per weekday (Mondays are compared to previous Mondays, Sundays to Sundays, and so on). After 7 days the anomaly sensor becomes active.
+
+> **Pattern learning works alongside the regular inactivity alert — it does not replace it.** The standard alert (e.g. 4 hours of no motion) always remains active as a safety net. Pattern learning adds an *earlier* warning layer on top of that.
 
 ### Anomaly score calculation
 
-| Check | Weight | Logic |
+The score is based on two checks, combined into a single 0–100 number every 5 minutes.
+
+| Check | Weight | What it measures |
 |---|---|---|
-| First motion | 65% | How many standard deviations past the expected wake time |
-| Hourly activity | 35% | Fraction of normally-active hours with no motion today |
+| First motion | 65% | How late the first movement of the day is compared to the person's usual time |
+| Hourly activity | 35% | How many hours that normally have movement are silent today |
 
-**First motion thresholds:**
+**First motion — how "late" is measured:**
 
-| Delay past expected | Score contribution |
+The system tracks how much the person's wake time normally varies day to day (e.g. ±8 minutes). It then measures how far today's silence has gone past that normal range:
+
+| Situation | Score |
 |---|---|
-| < 1σ (or motion detected) | 0 — normal |
-| 1–2σ late | 50 — slightly unusual |
-| 2–3σ late | 80 — clearly late |
-| > 3σ late | 100 — very unusual |
+| Motion already detected, or still within the normal window | 0 — normal |
+| Late by 1–2× the usual variation (e.g. 8–16 min past normal) | 50 — slightly unusual |
+| Late by 2–3× the usual variation | 80 — clearly late |
+| Late by more than 3× the usual variation | 100 — very unusual |
+
+In plain terms: if grandma normally wakes between 07:20–07:35 and it is 09:00 with no movement, that is far outside her normal range and scores high.
 
 ### Timeline
 

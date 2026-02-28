@@ -190,27 +190,37 @@ Mönsterinlärning observerar personens dagliga rörelsemönster och beräknar e
 
 ### Hur det fungerar
 
+**Du behöver inte konfigurera något.** Integrationen börjar samla in data automatiskt från dag ett. Du behöver aldrig tala om när personen brukar vakna — det räknar systemet ut själv.
+
 Varje dag registreras två saker:
 - Klockslaget för personens **första rörelse** (t.ex. 07:27)
 - Vilka **timmar** som hade minst en rörelsehändelse
 
-Varje natt kl 02:00 finaliseras data och en statistisk modell beräknas per veckodag. Efter 7 dagar aktiveras anomalysensorn.
+Varje natt kl 02:00 finaliseras data och en statistisk modell beräknas per veckodag (måndagar jämförs med tidigare måndagar, söndagar med söndagar osv). Efter 7 dagar aktiveras anomalysensorn.
+
+> **Mönsterinlärning fungerar parallellt med det vanliga inaktivitetslarmet — det ersätter det inte.** Standardlarmet (t.ex. 4 timmars inaktivitet) är alltid aktivt som säkerhetsnät. Mönsterinlärning lägger till ett *tidigare* varningslager ovanpå det.
 
 ### Beräkning av avvikelsespoäng
 
-| Kontroll | Vikt | Logik |
+Poängen baseras på två kontroller som kombineras till ett enda tal 0–100 var 5:e minut.
+
+| Kontroll | Vikt | Vad den mäter |
 |---|---|---|
-| Första rörelse | 65% | Hur många standardavvikelser förbi förväntad vakentid |
-| Timaktivitet | 35% | Andel normalt aktiva timmar utan rörelse idag |
+| Första rörelse | 65% | Hur sent dagens första rörelse är jämfört med personens vanliga tid |
+| Timaktivitet | 35% | Hur många timmar som normalt har rörelse men är tysta idag |
 
-**Tröskel för första rörelse:**
+**Första rörelse — hur "sent" mäts:**
 
-| Fördröjning efter förväntat | Poängbidrag |
+Systemet håller koll på hur mycket personens vakentid varierar från dag till dag (t.ex. ±8 minuter). Det mäter sedan hur långt utanför det normala spridningsmåttet dagens tystnad har gått:
+
+| Situation | Poäng |
 |---|---|
-| < 1σ (eller rörelse registrerad) | 0 — normalt |
-| 1–2σ sent | 50 — lite ovanligt |
-| 2–3σ sent | 80 — klart sent |
-| > 3σ sent | 100 — mycket ovanligt |
+| Rörelse redan registrerad, eller fortfarande inom normalt fönster | 0 — normalt |
+| Sent med 1–2× den vanliga variationen (t.ex. 8–16 min efter normalt) | 50 — lite ovanligt |
+| Sent med 2–3× den vanliga variationen | 80 — klart sent |
+| Sent med mer än 3× den vanliga variationen | 100 — mycket ovanligt |
+
+Enkelt uttryckt: om farmor normalt rör sig 07:20–07:35 och klockan är 09:00 utan aktivitet — är det långt utanför hennes normala mönster och ger hög poäng.
 
 ### Tidslinje
 
