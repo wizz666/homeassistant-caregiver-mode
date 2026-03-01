@@ -1553,27 +1553,28 @@ class CaregiverCoordinator:
         )
         fallback = self._msg("inactivity_fallback", **tmpl_vars)
 
-        if not self.ai_enabled or not self.ai_api_key:
+        resolved_key = self._resolve_ai_key()
+        if not self.ai_enabled or not resolved_key:
             return fallback
 
         prompt = self._msg("ai_prompt", **tmpl_vars)
 
         try:
             if self.ai_provider == AI_PROVIDER_GROQ:
-                return await self._call_groq(prompt, fallback)
+                return await self._call_groq(prompt, fallback, resolved_key)
             elif self.ai_provider == AI_PROVIDER_ANTHROPIC:
-                return await self._call_anthropic(prompt, fallback)
+                return await self._call_anthropic(prompt, fallback, resolved_key)
             elif self.ai_provider == AI_PROVIDER_OPENAI:
-                return await self._call_openai(prompt, fallback)
+                return await self._call_openai(prompt, fallback, resolved_key)
         except Exception as exc:
             _LOGGER.error("Caregiver [%s]: AI call failed: %s", self.person_name, exc)
 
         return fallback
 
-    async def _call_groq(self, prompt: str, fallback: str) -> str:
+    async def _call_groq(self, prompt: str, fallback: str, api_key: str = "") -> str:
         import aiohttp
         url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {self.ai_api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {api_key or self.ai_api_key}", "Content-Type": "application/json"}
         payload = {"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": prompt}], "max_tokens": 150, "temperature": 0.4}
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
@@ -1583,10 +1584,10 @@ class CaregiverCoordinator:
                 _LOGGER.error("Groq API error %d: %s", resp.status, await resp.text())
         return fallback
 
-    async def _call_anthropic(self, prompt: str, fallback: str) -> str:
+    async def _call_anthropic(self, prompt: str, fallback: str, api_key: str = "") -> str:
         import aiohttp
         url = "https://api.anthropic.com/v1/messages"
-        headers = {"x-api-key": self.ai_api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}
+        headers = {"x-api-key": api_key or self.ai_api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}
         payload = {"model": "claude-haiku-4-5-20251001", "max_tokens": 150, "messages": [{"role": "user", "content": prompt}]}
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
@@ -1596,10 +1597,10 @@ class CaregiverCoordinator:
                 _LOGGER.error("Anthropic API error %d: %s", resp.status, await resp.text())
         return fallback
 
-    async def _call_openai(self, prompt: str, fallback: str) -> str:
+    async def _call_openai(self, prompt: str, fallback: str, api_key: str = "") -> str:
         import aiohttp
         url = "https://api.openai.com/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {self.ai_api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {api_key or self.ai_api_key}", "Content-Type": "application/json"}
         payload = {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "max_tokens": 150, "temperature": 0.4}
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
@@ -1612,6 +1613,26 @@ class CaregiverCoordinator:
     # -----------------------------------------------------------------
     # Helpers
     # -----------------------------------------------------------------
+
+    def _resolve_ai_key(self) -> str:
+        """
+        Hämtar API-nyckel för konfigurerad AI-provider.
+        Prioritet: AI Hub (input_text.ai_hub_*) → egna config-entry-nyckeln.
+        AI Hub är valfritt – fungerar utan det installerat.
+        """
+        _bad = {"", "unknown", "unavailable", "none"}
+        hub_map = {
+            "groq":      "input_text.ai_hub_groq_key",
+            "anthropic": "input_text.ai_hub_anthropic_key",
+            "openai":    "input_text.ai_hub_openai_key",
+        }
+        hub_entity = hub_map.get(self.ai_provider)
+        if hub_entity:
+            st = self.hass.states.get(hub_entity)
+            hub_key = (st.state if st else "").strip()
+            if hub_key and hub_key not in _bad:
+                return hub_key
+        return self.ai_api_key
 
     def _get_lang(self) -> str:
         """Resolve the active language code (en or sv)."""
