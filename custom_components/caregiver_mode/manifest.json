@@ -1,12 +1,14 @@
 {
   "domain": "caregiver_mode",
   "name": "Caregiver Mode",
-  "version": "5.1.0",
+  "version": "5.1.1",
   "documentation": "https://github.com/wizz666/homeassistant-caregiver-mode",
   "issue_tracker": "https://github.com/wizz666/homeassistant-caregiver-mode/issues",
   "requirements": [],
   "dependencies": [],
-  "codeowners": ["@wizz666"],
+  "codeowners": [
+    "@wizz666"
+  ],
   "iot_class": "local_push",
   "config_flow": true
 }
