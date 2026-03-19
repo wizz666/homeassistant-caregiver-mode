@@ -458,7 +458,7 @@ The display reads data directly from Home Assistant via ESPHome — no extra Pyt
 
 - An ESP32-2432S028 board (~€8–12 on AliExpress, Amazon, etc.)
 - A USB cable (Micro-USB or USB-C depending on your board variant)
-- ESPHome (available as a Home Assistant add-on)
+- ESPHome (available as a Home Assistant app — **Settings → Apps**)
 
 ### Quick setup
 
@@ -529,7 +529,7 @@ If you don't already have a Home Assistant server:
 |---|---|---|
 | Zigbee coordinator | SONOFF Zigbee 3.0 USB Dongle Plus | €15–20 |
 
-Plug it into the RPi, install the Zigbee2MQTT or ZHA add-on in HA — no hub or subscription required.
+Plug it into the RPi, install the Zigbee2MQTT or ZHA app in HA (**Settings → Apps**) — no hub or subscription required.
 
 ---
 
