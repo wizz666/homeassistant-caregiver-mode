@@ -106,10 +106,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
-    # Show setup guide on first install (not on reload)
-    if not entry.data.get("_setup_notified"):
+    # Show setup guide if no rooms configured yet (first install)
+    if not entry.data.get("rooms"):
+        from homeassistant.components.persistent_notification import async_create as pn_create
         person = entry.data.get("person_name", "")
-        hass.components.persistent_notification.async_create(
+        pn_create(
+            hass,
             title=f"Caregiver Mode – {person} installed ✓",
             message=(
                 "**Next step: add rooms and sensors**\n\n"
@@ -121,9 +123,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "You can change all settings at any time from the same menu."
             ),
             notification_id=f"caregiver_setup_{entry.entry_id}",
-        )
-        hass.config_entries.async_update_entry(
-            entry, data={**entry.data, "_setup_notified": True}
         )
 
     # Register services (only once)

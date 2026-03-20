@@ -1,0 +1,285 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Caregiver Mode – Basic Settings",
+        "description": "Enter basic settings for the person you are monitoring.\n\nAfter setup, press ⚙️ Configure on the integration card to add rooms, motion sensors, and notification channels.",
+        "data": {
+          "person_name": "Person name",
+          "active_start": "Active hours start (HH:MM)",
+          "active_end": "Active hours end (HH:MM)",
+          "alert_delay": "Alert after X hours without motion",
+          "alert_cooldown": "Alert cooldown (hours between repeated alerts)",
+          "language": "Notification language"
+        }
+      },
+      "rooms": {
+        "title": "Caregiver Mode – Rooms",
+        "description": "Configured rooms:\n{rooms_summary}",
+        "menu_options": {
+          "add_room": "Add a room",
+          "done_rooms": "Done – continue to notifications"
+        }
+      },
+      "add_room": {
+        "title": "Add Room",
+        "description": "Give the room a name and select the motion sensors located in it.",
+        "data": {
+          "room_name": "Room name (e.g. Bedroom, Kitchen)",
+          "motion_sensors": "Motion sensors in this room"
+        }
+      },
+      "activity": {
+        "title": "Caregiver Mode – Activity Sensors",
+        "description": "Optional: select smart plugs, switches, or power sensors that signal the person is active (e.g. coffee maker, kettle, TV). These count as 'life signs' in addition to motion sensors.\n\nFor power sensors the threshold sets how many watts the reading must exceed to count as activity.",
+        "data": {
+          "activity_sensors": "Activity sensors (any domain)",
+          "activity_threshold": "Power threshold (W) for numeric sensors"
+        }
+      },
+      "notifications": {
+        "title": "Caregiver Mode – Notifications",
+        "description": "Configure how alerts are sent. At least one channel (HA app, Telegram, Ntfy, or WhatsApp) must be configured.\n\nWhatsApp via Callmebot is free. First activate it: send 'I allow callmebot to send me messages' to +34 644 96 38 86 on WhatsApp, then use the API key you receive.",
+        "data": {
+          "notify_primary": "Primary notification service (e.g. notify.mobile_app_iphone)",
+          "notify_secondary": "Secondary notification service (optional)",
+          "telegram_bot_token": "Telegram bot token",
+          "telegram_chat_ids": "Telegram chat ID(s) (comma-separated)",
+          "ntfy_topic": "Ntfy.sh topic",
+          "ntfy_server": "Ntfy.sh server URL",
+          "ai_enabled": "Enable AI-generated alert messages",
+          "ai_provider": "AI provider",
+          "ai_api_key": "AI API key",
+          "escalation_services": "Escalation contacts – notify services (comma-separated, e.g. notify.mobile_app_son)",
+          "escalation_delay": "Minutes before escalation fires if no response (5–60)",
+          "callmebot_phones": "WhatsApp phone numbers (comma-separated, international format: +46701234567)",
+          "callmebot_api_key": "Callmebot API key (from the activation message)"
+        }
+      },
+      "departure": {
+        "title": "Caregiver Mode – Departure Detection",
+        "description": "Optional: detect when the person leaves home. Skip this step if not needed.\n\n'I'm OK' button: enter the entity_id of any button, Zigbee remote, or binary sensor the person can press to signal they are fine.",
+        "data": {
+          "device_tracker": "Phone / person tracker (optional)",
+          "exit_sensors": "Exit door sensors (front door, back door, etc.)",
+          "departure_delay": "Minutes to wait after door closes before checking (1–15)",
+          "wellness_button": "'I'm OK' button entity_id (optional, e.g. button.zigbee_button)"
+        }
+      },
+      "camera": {
+        "title": "Caregiver Mode – Fall Detection (optional)",
+        "description": "Optional: use a camera and AI to detect falls. Leave camera blank to skip.\n\nGroq (free) requires a Groq API key. If you already entered a Groq key for AI notifications, enter the same key here.\n\nOllama URL and model are only used when Ollama is selected as provider.",
+        "data": {
+          "camera_entity": "Camera entity",
+          "vision_provider": "Vision AI provider",
+          "vision_api_key": "Vision API key (not needed for Ollama)",
+          "ollama_url": "Ollama server URL",
+          "ollama_model": "Ollama model name",
+          "fall_confirm_count": "Consecutive positive detections before alert (1–5)"
+        }
+      }
+    },
+    "error": {
+      "invalid_time": "Invalid time format. Use HH:MM.",
+      "no_sensors": "At least one sensor must be selected.",
+      "room_name_required": "Room name cannot be empty.",
+      "room_name_exists": "A room with this name already exists.",
+      "invalid_notify": "Notification service must start with 'notify.'",
+      "ai_key_required": "API key is required when AI messages are enabled.",
+      "telegram_chat_id_required": "At least one Telegram chat ID is required when a bot token is provided.",
+      "no_channel_configured": "At least one notification channel must be configured (HA app, Telegram, or Ntfy).",
+      "vision_key_required": "API key is required for the selected vision provider (not needed for Ollama)."
+    },
+    "abort": {
+      "already_configured": "This person is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Caregiver Mode – Configure",
+        "description": "Select what you want to configure.\n\n**First time setup?** Start with:\n1. **Rooms** – add rooms and motion sensors\n2. **Notifications** – set up how you receive alerts\n3. **Timing** – set active monitoring hours\n\nYou can return here any time by pressing ⚙️ Configure on the integration card."
+      },
+      "configure": {
+        "title": "Caregiver Mode – Configure",
+        "menu_options": {
+          "timing": "Timing & alert thresholds",
+          "rooms": "Manage rooms",
+          "notifications": "Notification channels",
+          "departure": "Departure detection",
+          "camera": "Fall detection (camera & AI)",
+          "language": "Notification language",
+          "pattern": "Pattern learning (anomaly detection)"
+        }
+      },
+      "timing": {
+        "title": "Caregiver Mode – Timing",
+        "description": "Update monitoring time window and alert thresholds.",
+        "data": {
+          "active_start": "Active hours start (HH:MM)",
+          "active_end": "Active hours end (HH:MM)",
+          "alert_delay": "Alert after X hours without motion",
+          "alert_cooldown": "Alert cooldown (hours between repeated alerts)"
+        }
+      },
+      "language": {
+        "title": "Caregiver Mode – Notification Language",
+        "description": "Choose the language for alert and notification messages.",
+        "data": {
+          "language": "Notification language"
+        }
+      },
+      "rooms": {
+        "title": "Caregiver Mode – Rooms",
+        "description": "Configured rooms:\n{rooms_summary}",
+        "menu_options": {
+          "add_room": "Add a room",
+          "edit_room": "Edit a room (add/remove sensors)",
+          "remove_room": "Remove a room",
+          "done_rooms": "Save room changes"
+        }
+      },
+      "add_room": {
+        "title": "Add Room",
+        "description": "Give the room a name and select the motion sensors located in it.",
+        "data": {
+          "room_name": "Room name (e.g. Bedroom, Kitchen)",
+          "motion_sensors": "Motion sensors in this room"
+        }
+      },
+      "edit_room": {
+        "title": "Edit Room – Select Room",
+        "description": "Choose which room to edit.",
+        "data": {
+          "room_name": "Room to edit"
+        }
+      },
+      "edit_room_sensors": {
+        "title": "Edit Room – {room_name}",
+        "description": "Select the motion sensors for {room_name}. Sensors from other rooms are not shown.",
+        "data": {
+          "motion_sensors": "Motion sensors in this room"
+        }
+      },
+      "remove_room": {
+        "title": "Remove Room",
+        "description": "Select which room to remove. Its sensors will become available again.",
+        "data": {
+          "room_name": "Room to remove"
+        }
+      },
+      "notifications": {
+        "title": "Caregiver Mode – Notifications",
+        "description": "Configure notification channels. At least one (HA app, Telegram, Ntfy, or WhatsApp) must be set.\n\nWhatsApp via Callmebot is free. First activate it: send 'I allow callmebot to send me messages' to +34 644 96 38 86 on WhatsApp.",
+        "data": {
+          "notify_primary": "Primary notification service",
+          "notify_secondary": "Secondary notification service (optional)",
+          "telegram_bot_token": "Telegram bot token",
+          "telegram_chat_ids": "Telegram chat ID(s) (comma-separated)",
+          "ntfy_topic": "Ntfy.sh topic",
+          "ntfy_server": "Ntfy.sh server URL",
+          "ai_enabled": "Enable AI-generated alert messages",
+          "ai_provider": "AI provider",
+          "ai_api_key": "AI API key",
+          "callmebot_phones": "WhatsApp phone numbers (comma-separated, e.g. +46701234567)",
+          "callmebot_api_key": "Callmebot API key"
+        }
+      },
+      "departure": {
+        "title": "Caregiver Mode – Departure Detection",
+        "description": "Detect when the person leaves home. Changes are saved immediately.",
+        "data": {
+          "device_tracker": "Phone / person tracker (optional)",
+          "exit_sensors": "Exit door sensors (front door, back door, etc.)",
+          "departure_delay": "Minutes to wait after door closes before checking (1–15)"
+        }
+      },
+      "camera": {
+        "title": "Caregiver Mode – Fall Detection",
+        "description": "Detect falls using a camera and AI vision. Select no camera to disable.\n\nGroq (free) requires a Groq API key. If you use Groq for AI notifications, enter the same key.\n\nOllama URL and model are only used when Ollama is selected.",
+        "data": {
+          "camera_entity": "Camera entity",
+          "vision_provider": "Vision AI provider",
+          "vision_api_key": "Vision API key (not needed for Ollama)",
+          "ollama_url": "Ollama server URL",
+          "ollama_model": "Ollama model name",
+          "fall_confirm_count": "Consecutive detections before alert (1–5)"
+        }
+      },
+      "pattern": {
+        "title": "Caregiver Mode – Pattern Learning",
+        "description": "Pattern learning observes the person's daily rhythm and computes an anomaly score (0–100). After 7 days of data the sensor becomes active.\n\nEnable 'Early warning alerts' to get notified when the score exceeds the threshold — before the normal inactivity alert fires.",
+        "data": {
+          "pattern_learning_enabled": "Enable pattern learning",
+          "anomaly_alert_enabled": "Enable early warning alerts",
+          "anomaly_alert_threshold": "Early warning threshold (50–100)"
+        }
+      },
+      "wellness_escalation": {
+        "title": "Caregiver Mode – Wellness & Escalation",
+        "description": "'I'm OK' button: the monitored person can press this to send a wellness confirmation and clear any active alert. Enter the entity_id of any button, Zigbee remote, or binary_sensor.\n\nEscalation chain: if an alert is sent but nobody responds within the set time, a second alert goes to the escalation contacts.",
+        "data": {
+          "wellness_button": "'I'm OK' button entity_id (optional)",
+          "escalation_services": "Escalation contacts – notify services (comma-separated)",
+          "escalation_delay": "Minutes before escalation fires (5–60)"
+        }
+      },
+      "activity": {
+        "title": "Caregiver Mode – Activity Sensors",
+        "description": "Smart plugs, switches, or power sensors that signal the person is active (e.g. coffee maker, kettle, TV). These count as 'life signs' alongside motion sensors.\n\nFor power sensors: the threshold sets how many watts must be exceeded to count as activity.",
+        "data": {
+          "activity_sensors": "Activity sensors (any domain)",
+          "activity_threshold": "Power threshold (W) for numeric sensors"
+        }
+      },
+      "weekly_summary": {
+        "title": "Caregiver Mode – Weekly Summary",
+        "description": "Sends an automatic activity report on the chosen day and time. The report includes how many days the person was active, average wake time, and the weekly trend.\n\nRequires at least 7 days of pattern learning data.",
+        "data": {
+          "weekly_summary_enabled": "Enable weekly summary",
+          "weekly_summary_day": "Send on weekday",
+          "weekly_summary_hour": "Send at hour (0–23)"
+        }
+      }
+    },
+    "error": {
+      "invalid_time": "Invalid time format. Use HH:MM.",
+      "no_sensors": "At least one sensor must be selected.",
+      "room_name_required": "Room name cannot be empty.",
+      "room_name_exists": "A room with this name already exists.",
+      "invalid_notify": "Notification service must start with 'notify.'",
+      "ai_key_required": "API key is required when AI messages are enabled.",
+      "telegram_chat_id_required": "At least one Telegram chat ID is required when a bot token is provided.",
+      "no_channel_configured": "At least one notification channel must be configured (HA app, Telegram, Ntfy, or WhatsApp).",
+      "callmebot_key_required": "Callmebot API key is required when phone numbers are entered.",
+      "vision_key_required": "API key is required for the selected vision provider (not needed for Ollama)."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "caregiver_status": {
+        "name": "Status",
+        "state": {
+          "active": "Active",
+          "inactive": "Inactive",
+          "alert": "Alert",
+          "unknown": "Unknown"
+        }
+      },
+      "caregiver_last_seen": {
+        "name": "Last Seen"
+      },
+      "caregiver_last_room": {
+        "name": "Last Room"
+      }
+    },
+    "binary_sensor": {
+      "caregiver_alert": {
+        "name": "Alert Active"
+      },
+      "caregiver_fall_detected": {
+        "name": "Fall Detected"
+      }
+    }
+  }
+}
