@@ -69,7 +69,7 @@ CONF_FALL_CONFIRM_COUNT = "fall_confirm_count"
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 DEFAULT_OLLAMA_MODEL = "moondream"
-DEFAULT_GROQ_VISION_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"  # fallback: llama-3.2-11b-vision-preview
+DEFAULT_GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"  # fallback: llama-3.2-11b-vision-preview
 DEFAULT_FALL_CONFIRM_COUNT = 2
 
 CONF_GROQ_VISION_MODEL = "groq_vision_model"
