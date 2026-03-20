@@ -106,6 +106,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
+    # Show setup guide on first install (not on reload)
+    if not entry.data.get("_setup_notified"):
+        person = entry.data.get("person_name", "")
+        hass.components.persistent_notification.async_create(
+            title=f"Caregiver Mode – {person} installed ✓",
+            message=(
+                "**Next step: add rooms and sensors**\n\n"
+                "Go to **Settings → Integrations → Caregiver Mode** "
+                "and press ⚙️ **Configure** to set up:\n\n"
+                "- **Rooms** – add rooms with motion sensors\n"
+                "- **Notifications** – choose how you receive alerts\n"
+                "- **Timing** – set active monitoring hours\n\n"
+                "You can change all settings at any time from the same menu."
+            ),
+            notification_id=f"caregiver_setup_{entry.entry_id}",
+        )
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, "_setup_notified": True}
+        )
+
     # Register services (only once)
     if not hass.services.has_service(DOMAIN, "trigger_test_fall"):
         async def _handle_test_fall(call) -> None:

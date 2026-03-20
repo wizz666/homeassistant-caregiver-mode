@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Caregiver Mode – Basic Settings",
-        "description": "Configure basic monitoring settings for the person.",
+        "description": "Enter basic settings for the person you are monitoring.\n\nAfter setup, press ⚙️ Configure on the integration card to add rooms, motion sensors, and notification channels.",
         "data": {
           "person_name": "Person name",
           "active_start": "Active hours start (HH:MM)",
@@ -97,7 +97,8 @@
   "options": {
     "step": {
       "init": {
-        "title": "Caregiver Mode – Configure"
+        "title": "Caregiver Mode – Configure",
+        "description": "Select what you want to configure.\n\n**First time setup?** Start with:\n1. **Rooms** – add rooms and motion sensors\n2. **Notifications** – set up how you receive alerts\n3. **Timing** – set active monitoring hours\n\nYou can return here any time by pressing ⚙️ Configure on the integration card."
       },
       "configure": {
         "title": "Caregiver Mode – Configure",
@@ -169,9 +170,9 @@
       },
       "notifications": {
         "title": "Caregiver Mode – Notifications",
-        "description": "Configure how alerts are sent. At least one channel (HA app, Telegram, or Ntfy) must be configured.",
+        "description": "Configure notification channels. At least one (HA app, Telegram, Ntfy, or WhatsApp) must be set.\n\nWhatsApp via Callmebot is free. First activate it: send 'I allow callmebot to send me messages' to +34 644 96 38 86 on WhatsApp.",
         "data": {
-          "notify_primary": "Primary notification service (e.g. notify.mobile_app_iphone)",
+          "notify_primary": "Primary notification service",
           "notify_secondary": "Secondary notification service (optional)",
           "telegram_bot_token": "Telegram bot token",
           "telegram_chat_ids": "Telegram chat ID(s) (comma-separated)",
@@ -179,7 +180,9 @@
           "ntfy_server": "Ntfy.sh server URL",
           "ai_enabled": "Enable AI-generated alert messages",
           "ai_provider": "AI provider",
-          "ai_api_key": "AI API key"
+          "ai_api_key": "AI API key",
+          "callmebot_phones": "WhatsApp phone numbers (comma-separated, e.g. +46701234567)",
+          "callmebot_api_key": "Callmebot API key"
         }
       },
       "departure": {
@@ -236,23 +239,6 @@
           "weekly_summary_enabled": "Enable weekly summary",
           "weekly_summary_day": "Send on weekday",
           "weekly_summary_hour": "Send at hour (0–23)"
-        }
-      },
-      "notifications": {
-        "title": "Caregiver Mode – Notifications",
-        "description": "Configure notification channels. At least one (HA app, Telegram, Ntfy, or WhatsApp) must be set.\n\nWhatsApp via Callmebot is free. First activate it: send 'I allow callmebot to send me messages' to +34 644 96 38 86 on WhatsApp.",
-        "data": {
-          "notify_primary": "Primary notification service",
-          "notify_secondary": "Secondary notification service (optional)",
-          "telegram_bot_token": "Telegram bot token",
-          "telegram_chat_ids": "Telegram chat ID(s) (comma-separated)",
-          "ntfy_topic": "Ntfy.sh topic",
-          "ntfy_server": "Ntfy.sh server URL",
-          "ai_enabled": "Enable AI-generated alert messages",
-          "ai_provider": "AI provider",
-          "ai_api_key": "AI API key",
-          "callmebot_phones": "WhatsApp phone numbers (comma-separated, e.g. +46701234567)",
-          "callmebot_api_key": "Callmebot API key"
         }
       }
     },
