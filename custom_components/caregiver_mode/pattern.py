@@ -1,21 +1,19 @@
 """Pattern learning for Caregiver Mode V3.0."""
 from __future__ import annotations
 
-import json
 import logging
 import math
-import os
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
+from homeassistant.helpers.storage import Store
+
 from .const import PATTERN_MIN_DAYS, PATTERN_HISTORY_DAYS
 
 _LOGGER = logging.getLogger(__name__)
-STORAGE_DIR = "/config/.storage"
-
 
 def _minutes_to_hhmm(minutes: float) -> str:
     """Convert minutes from midnight to HH:MM string."""
@@ -30,7 +28,7 @@ class CaregiverPatternLearner:
     def __init__(self, slug: str, hass: "HomeAssistant") -> None:
         self._slug = slug
         self._hass = hass
-        self._storage_path = f"{STORAGE_DIR}/caregiver_pattern_{slug}.json"
+        self._store: Store = Store(hass, 1, f"caregiver_pattern_{slug}")
 
         # Today's running data (reset nightly at 02:00)
         self._today_first_motion_minutes: int | None = None
@@ -433,15 +431,12 @@ class CaregiverPatternLearner:
     # ------------------------------------------------------------------
 
     async def async_load(self) -> None:
-        """Load pattern data from storage file."""
+        """Load pattern data from storage."""
         try:
-            if not os.path.exists(self._storage_path):
-                _LOGGER.debug(
-                    "CaregiverPattern [%s]: no storage file, starting fresh", self._slug
-                )
+            data = await self._store.async_load()
+            if data is None:
+                _LOGGER.debug("CaregiverPattern [%s]: no stored data, starting fresh", self._slug)
                 return
-            with open(self._storage_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
             self._history = data.get("history", [])
             self._model = data.get("model", {})
             _LOGGER.info(
@@ -454,17 +449,14 @@ class CaregiverPatternLearner:
             )
 
     async def async_save(self) -> None:
-        """Save pattern data to storage file."""
+        """Save pattern data to storage."""
         try:
-            os.makedirs(STORAGE_DIR, exist_ok=True)
             data = {
-                "version": 1,
                 "slug": self._slug,
                 "history": self._history,
                 "model": self._model,
             }
-            with open(self._storage_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            await self._store.async_save(data)
             _LOGGER.debug(
                 "CaregiverPattern [%s]: saved %d history entries",
                 self._slug, len(self._history),
