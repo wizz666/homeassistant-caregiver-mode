@@ -9,6 +9,7 @@ from typing import Callable
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, Event, callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
@@ -896,7 +897,7 @@ class CaregiverCoordinator:
         import os
         slug = self.person_name.lower().replace(" ", "_")
         filename = f"caregiver_snapshot_{slug}.jpg"
-        filepath = f"/config/www/{filename}"
+        filepath = self.hass.config.path("www", filename)
         try:
             image_bytes = base64.b64decode(image_b64)
             await self.hass.async_add_executor_job(
@@ -907,15 +908,17 @@ class CaregiverCoordinator:
         except Exception as exc:
             _LOGGER.error("Caregiver [%s]: failed to save snapshot: %s", self.person_name, exc)
 
-    def _delete_fall_snapshot(self) -> None:
+    async def _delete_fall_snapshot(self) -> None:
         """Delete fall snapshot file from www folder."""
         import os
         slug = self.person_name.lower().replace(" ", "_")
-        filepath = f"/config/www/caregiver_snapshot_{slug}.jpg"
+        filepath = self.hass.config.path("www", f"caregiver_snapshot_{slug}.jpg")
         try:
-            if os.path.exists(filepath):
-                os.remove(filepath)
-                _LOGGER.debug("Caregiver [%s]: snapshot deleted", self.person_name)
+            def _do_delete() -> None:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+            await self.hass.async_add_executor_job(_do_delete)
+            _LOGGER.debug("Caregiver [%s]: snapshot deleted", self.person_name)
         except Exception as exc:
             _LOGGER.error("Caregiver [%s]: failed to delete snapshot: %s", self.person_name, exc)
 
@@ -964,14 +967,14 @@ class CaregiverCoordinator:
             "max_tokens": 10,
             "temperature": 0.0,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"].strip()
-                _LOGGER.error("Groq vision error %d: %s", resp.status, await resp.text())
+        session = async_get_clientsession(self.hass)
+        async with session.post(
+            url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"].strip()
+            _LOGGER.error("Groq vision error %d: %s", resp.status, await resp.text())
         return ""
 
     async def _vision_ollama(self, image_b64: str, question: str) -> str:
@@ -983,14 +986,14 @@ class CaregiverCoordinator:
             "images": [image_b64],
             "stream": False,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url, json=payload, timeout=aiohttp.ClientTimeout(total=60)
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data.get("response", "").strip()
-                _LOGGER.error("Ollama vision error %d: %s", resp.status, await resp.text())
+        session = async_get_clientsession(self.hass)
+        async with session.post(
+            url, json=payload, timeout=aiohttp.ClientTimeout(total=60)
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data.get("response", "").strip()
+            _LOGGER.error("Ollama vision error %d: %s", resp.status, await resp.text())
         return ""
 
     async def _vision_anthropic(self, image_b64: str, content_type: str, question: str) -> str:
@@ -1015,14 +1018,14 @@ class CaregiverCoordinator:
                 ],
             }],
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["content"][0]["text"].strip()
-                _LOGGER.error("Anthropic vision error %d: %s", resp.status, await resp.text())
+        session = async_get_clientsession(self.hass)
+        async with session.post(
+            url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data["content"][0]["text"].strip()
+            _LOGGER.error("Anthropic vision error %d: %s", resp.status, await resp.text())
         return ""
 
     async def _vision_openai(self, image_b64: str, content_type: str, question: str) -> str:
@@ -1044,14 +1047,14 @@ class CaregiverCoordinator:
             "max_tokens": 10,
             "temperature": 0.0,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"].strip()
-                _LOGGER.error("OpenAI vision error %d: %s", resp.status, await resp.text())
+        session = async_get_clientsession(self.hass)
+        async with session.post(
+            url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"].strip()
+            _LOGGER.error("OpenAI vision error %d: %s", resp.status, await resp.text())
         return ""
 
     async def _send_fall_alert(self) -> None:
@@ -1132,22 +1135,22 @@ class CaregiverCoordinator:
             filename="snapshot.jpg",
             content_type="image/jpeg",
         )
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url, data=form, timeout=aiohttp.ClientTimeout(total=30)
-            ) as resp:
-                if resp.status == 200:
-                    _LOGGER.info(
-                        "Caregiver [%s]: Telegram photo sent to %s",
-                        self.person_name, chat_id,
-                    )
-                else:
-                    body = await resp.text()
-                    _LOGGER.error(
-                        "Caregiver [%s]: Telegram photo error %d: %s — falling back to text",
-                        self.person_name, resp.status, body,
-                    )
-                    await self._send_telegram(chat_id, title, message)
+        session = async_get_clientsession(self.hass)
+        async with session.post(
+            url, data=form, timeout=aiohttp.ClientTimeout(total=30)
+        ) as resp:
+            if resp.status == 200:
+                _LOGGER.info(
+                    "Caregiver [%s]: Telegram photo sent to %s",
+                    self.person_name, chat_id,
+                )
+            else:
+                body = await resp.text()
+                _LOGGER.error(
+                    "Caregiver [%s]: Telegram photo error %d: %s — falling back to text",
+                    self.person_name, resp.status, body,
+                )
+                await self._send_telegram(chat_id, title, message)
 
     # -----------------------------------------------------------------
     # Periodic inactivity check
@@ -1472,20 +1475,20 @@ class CaregiverCoordinator:
             "text": f"*{title}*\n{message}",
             "parse_mode": "Markdown",
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url, json=payload, timeout=aiohttp.ClientTimeout(total=15)
-            ) as resp:
-                if resp.status == 200:
-                    _LOGGER.info(
-                        "Caregiver [%s]: Telegram sent to %s", self.person_name, chat_id
-                    )
-                else:
-                    body = await resp.text()
-                    _LOGGER.error(
-                        "Caregiver [%s]: Telegram error %d for %s: %s",
-                        self.person_name, resp.status, chat_id, body,
-                    )
+        session = async_get_clientsession(self.hass)
+        async with session.post(
+            url, json=payload, timeout=aiohttp.ClientTimeout(total=15)
+        ) as resp:
+            if resp.status == 200:
+                _LOGGER.info(
+                    "Caregiver [%s]: Telegram sent to %s", self.person_name, chat_id
+                )
+            else:
+                body = await resp.text()
+                _LOGGER.error(
+                    "Caregiver [%s]: Telegram error %d for %s: %s",
+                    self.person_name, resp.status, chat_id, body,
+                )
 
     async def _send_ntfy(self, title: str, message: str) -> None:
         """Send a notification via ntfy.sh (or self-hosted ntfy)."""
@@ -1497,24 +1500,24 @@ class CaregiverCoordinator:
             "Tags": "warning,house",
             "Content-Type": "text/plain; charset=utf-8",
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url,
-                data=message.encode("utf-8"),
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=15),
-            ) as resp:
-                if resp.status in (200, 201):
-                    _LOGGER.info(
-                        "Caregiver [%s]: ntfy sent to %s/%s",
-                        self.person_name, self.ntfy_server, self.ntfy_topic,
-                    )
-                else:
-                    body = await resp.text()
-                    _LOGGER.error(
-                        "Caregiver [%s]: ntfy error %d: %s",
-                        self.person_name, resp.status, body,
-                    )
+        session = async_get_clientsession(self.hass)
+        async with session.post(
+            url,
+            data=message.encode("utf-8"),
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as resp:
+            if resp.status in (200, 201):
+                _LOGGER.info(
+                    "Caregiver [%s]: ntfy sent to %s/%s",
+                    self.person_name, self.ntfy_server, self.ntfy_topic,
+                )
+            else:
+                body = await resp.text()
+                _LOGGER.error(
+                    "Caregiver [%s]: ntfy error %d: %s",
+                    self.person_name, resp.status, body,
+                )
 
     async def _send_whatsapp(self, phone: str, title: str, message: str) -> None:
         """Send a WhatsApp message via Callmebot free API."""
@@ -1525,20 +1528,20 @@ class CaregiverCoordinator:
             f"https://api.callmebot.com/whatsapp.php"
             f"?phone={phone}&text={text}&apikey={self.callmebot_api_key}"
         )
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url, timeout=aiohttp.ClientTimeout(total=20)
-            ) as resp:
-                if resp.status == 200:
-                    _LOGGER.info(
-                        "Caregiver [%s]: WhatsApp sent to %s", self.person_name, phone
-                    )
-                else:
-                    body = await resp.text()
-                    _LOGGER.error(
-                        "Caregiver [%s]: WhatsApp error %d for %s: %s",
-                        self.person_name, resp.status, phone, body,
-                    )
+        session = async_get_clientsession(self.hass)
+        async with session.get(
+            url, timeout=aiohttp.ClientTimeout(total=20)
+        ) as resp:
+            if resp.status == 200:
+                _LOGGER.info(
+                    "Caregiver [%s]: WhatsApp sent to %s", self.person_name, phone
+                )
+            else:
+                body = await resp.text()
+                _LOGGER.error(
+                    "Caregiver [%s]: WhatsApp error %d for %s: %s",
+                    self.person_name, resp.status, phone, body,
+                )
 
     # -----------------------------------------------------------------
     # AI message generation
@@ -1595,12 +1598,12 @@ class CaregiverCoordinator:
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key or self.ai_api_key}", "Content-Type": "application/json"}
         payload = {"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": prompt}], "max_tokens": 150, "temperature": 0.4}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"].strip()
-                _LOGGER.error("Groq API error %d: %s", resp.status, await resp.text())
+        session = async_get_clientsession(self.hass)
+        async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"].strip()
+            _LOGGER.error("Groq API error %d: %s", resp.status, await resp.text())
         return fallback
 
     async def _call_anthropic(self, prompt: str, fallback: str, api_key: str = "") -> str:
@@ -1608,12 +1611,12 @@ class CaregiverCoordinator:
         url = "https://api.anthropic.com/v1/messages"
         headers = {"x-api-key": api_key or self.ai_api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}
         payload = {"model": "claude-haiku-4-5-20251001", "max_tokens": 150, "messages": [{"role": "user", "content": prompt}]}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["content"][0]["text"].strip()
-                _LOGGER.error("Anthropic API error %d: %s", resp.status, await resp.text())
+        session = async_get_clientsession(self.hass)
+        async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data["content"][0]["text"].strip()
+            _LOGGER.error("Anthropic API error %d: %s", resp.status, await resp.text())
         return fallback
 
     async def _call_openai(self, prompt: str, fallback: str, api_key: str = "") -> str:
@@ -1621,12 +1624,12 @@ class CaregiverCoordinator:
         url = "https://api.openai.com/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key or self.ai_api_key}", "Content-Type": "application/json"}
         payload = {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "max_tokens": 150, "temperature": 0.4}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"].strip()
-                _LOGGER.error("OpenAI API error %d: %s", resp.status, await resp.text())
+        session = async_get_clientsession(self.hass)
+        async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"].strip()
+            _LOGGER.error("OpenAI API error %d: %s", resp.status, await resp.text())
         return fallback
 
     # -----------------------------------------------------------------
@@ -1634,23 +1637,7 @@ class CaregiverCoordinator:
     # -----------------------------------------------------------------
 
     def _resolve_ai_key(self) -> str:
-        """
-        Hämtar API-nyckel för konfigurerad AI-provider.
-        Prioritet: AI Hub (input_text.ai_hub_*) → egna config-entry-nyckeln.
-        AI Hub är valfritt – fungerar utan det installerat.
-        """
-        _bad = {"", "unknown", "unavailable", "none"}
-        hub_map = {
-            "groq":      "input_text.ai_hub_groq_key",
-            "anthropic": "input_text.ai_hub_anthropic_key",
-            "openai":    "input_text.ai_hub_openai_key",
-        }
-        hub_entity = hub_map.get(self.ai_provider)
-        if hub_entity:
-            st = self.hass.states.get(hub_entity)
-            hub_key = (st.state if st else "").strip()
-            if hub_key and hub_key not in _bad:
-                return hub_key
+        """Return the configured AI provider API key from the config entry."""
         return self.ai_api_key
 
     def _get_lang(self) -> str:
